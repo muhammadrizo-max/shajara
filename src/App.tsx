@@ -7,6 +7,8 @@ import {
   importStateFromJSON 
 } from './utils/storage';
 import { hydrateAllMediaUrls } from './utils/mediaStorage';
+import { addHistoryRecord } from './utils/historyStorage';
+import { getCurrentSessionUser } from './utils/userAuthStorage';
 import { DEFAULT_ME_ID, DEFAULT_ROOT_ID, INITIAL_PEOPLE } from './data/initialData';
 import { Navbar } from './components/Navbar';
 import { FamilyTreeCanvas } from './components/FamilyTreeCanvas';
@@ -17,6 +19,9 @@ import { EditPersonModal } from './components/EditPersonModal';
 import { RelationCalculatorModal } from './components/RelationCalculatorModal';
 import { StatisticsModal } from './components/StatisticsModal';
 import { LoginModal } from './components/LoginModal';
+import { PrintTreeModal } from './components/PrintTreeModal';
+import { HistoryModal } from './components/HistoryModal';
+import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { 
   Search, 
   CheckCircle2, 
@@ -28,12 +33,32 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [state, setState] = useState<FamilyTreeState>(() => loadFamilyTreeState());
+  const [state, setState] = useState<FamilyTreeState>(() => {
+    const loaded = loadFamilyTreeState();
+    const session = getCurrentSessionUser();
+    if (session) {
+      return {
+        ...loaded,
+        currentUser: session,
+        meId: session.personId && loaded.people[session.personId] ? session.personId : loaded.meId
+      };
+    }
+    return loaded;
+  });
+
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  // URL query params for Invite links
+  const [inviteCodeFromUrl, setInviteCodeFromUrl] = useState<string | null>(null);
+  const [targetPersonFromUrl, setTargetPersonFromUrl] = useState<string | null>(null);
+
   // Modals & Drawers
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => !state.currentUser);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
+
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
   const [parentForNewChild, setParentForNewChild] = useState<Person | null>(null);
@@ -41,6 +66,22 @@ export default function App() {
   const [isCalcModalOpen, setIsCalcModalOpen] = useState<boolean>(false);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'warn' } | null>(null);
+
+  // Check URL parameters for invite links (?invite=ABC123)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const inv = params.get('invite');
+      const pId = params.get('personId');
+      if (inv) {
+        setInviteCodeFromUrl(inv);
+        if (pId) setTargetPersonFromUrl(pId);
+        setIsLoginModalOpen(true);
+      }
+    } catch (e) {
+      console.warn("Could not parse URL query parameters:", e);
+    }
+  }, []);
 
   // Save to localStorage on state change
   useEffect(() => {
@@ -95,6 +136,7 @@ export default function App() {
 
   // Login handler
   const handleLogin = (user: AuthUser) => {
+    const actorName = user.fullName || user.name;
     if (user.personId && state.people[user.personId]) {
       setState((prev) => ({
         ...prev,
@@ -110,7 +152,7 @@ export default function App() {
         currentUser: user,
         activePerspectiveId: undefined,
       }));
-      showToast(`Mehmon sifatida xush kelibsiz, ${user.name}!`);
+      showToast(`Xush kelibsiz, ${user.name}!`);
     }
     setIsLoginModalOpen(false);
   };
@@ -135,6 +177,9 @@ export default function App() {
 
   // Handlers for people state
   const handleSavePerson = (person: Person) => {
+    const isNew = !state.people[person.id];
+    const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Oila a\'zosi';
+
     // Permission check for modifying existing person
     if (personToEdit && state.currentUser?.personId) {
       if (personToEdit.id !== state.currentUser.personId) {
@@ -151,6 +196,17 @@ export default function App() {
       };
     });
 
+    // Audit log / Shajara tarixiga yozish
+    addHistoryRecord({
+      action: isNew ? 'person_add' : 'person_edit',
+      actorName,
+      personName: `${person.name} ${person.surname || ''}`.trim(),
+      personId: person.id,
+      title: isNew ? "Yangi shaxs qo'shildi" : "Shaxs ma'lumotlari yangilandi",
+      description: `${actorName} tomonidan «${person.name} ${person.surname || ''}» shajaraga ${isNew ? 'kiritildi' : 'tahrirlandi'}.`,
+      details: `${person.generation}-pusht. Tug'ilgan: ${person.birthDate || person.birthYear || 'Noma\'lum'}. Kasbi: ${person.occupation || 'Ko\'rsatilmagan'}`
+    });
+
     // Update selected person if currently open
     if (selectedPerson && selectedPerson.id === person.id) {
       setSelectedPerson(person);
@@ -159,11 +215,14 @@ export default function App() {
   };
 
   const handleDeletePerson = (personId: string) => {
+    const person = state.people[personId];
     // Cannot delete own profile
     if (state.currentUser?.personId === personId) {
       showToast("O'z profilingizni shajaradan o'chira olmaysiz!", "warn");
       return;
     }
+
+    const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Oila a\'zosi';
 
     setState((prev) => {
       // Find all descendants recursively
@@ -181,7 +240,6 @@ export default function App() {
       const newPeople = { ...prev.people };
       idsToDelete.forEach((id) => delete newPeople[id]);
 
-      // If deleted person was root or me, fallback
       let newMeId = prev.meId;
       if (idsToDelete.has(prev.meId)) {
         newMeId = Object.keys(newPeople)[0] || DEFAULT_ME_ID;
@@ -193,6 +251,16 @@ export default function App() {
         meId: newMeId,
       };
     });
+
+    // Audit log
+    addHistoryRecord({
+      action: 'person_delete',
+      actorName,
+      personName: person?.name || 'Shaxs',
+      title: "Shaxs shajaradan o'chirildi",
+      description: `${actorName} tomonidan «${person?.name || 'Shaxs'}» va uning shoxlari o'chirildi.`,
+    });
+
     showToast("Shaxs va uning shoxlari shajaradan o'chirildi.");
   };
 
@@ -232,6 +300,13 @@ export default function App() {
     try {
       const importedState = await importStateFromJSON(file);
       setState(importedState);
+      const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Oila a\'zosi';
+      addHistoryRecord({
+        action: 'tree_import',
+        actorName,
+        title: "Tashqi fayldan shajara tiklandi",
+        description: `${actorName} tomonidan JSON fayldan ${Object.keys(importedState.people).length} nafar shaxs import qilindi.`,
+      });
       showToast("Shajara ma'lumotlari muvaffaqiyatli yuklandi!");
     } catch (err: any) {
       alert("Faylni yuklashda xatolik yuz berdi: " + err.message);
@@ -263,6 +338,12 @@ export default function App() {
         },
       };
       setState(freshState);
+      addHistoryRecord({
+        action: 'tree_reset',
+        actorName: 'Tizim',
+        title: "Boshlang'ich holatga qaytarildi",
+        description: "Shajara dastlabki 7 ajdod namunasiga qaytarildi.",
+      });
       showToast("Boshlang'ich shajara ma'lumotlari qayta tiklandi!");
     }
   };
@@ -300,6 +381,9 @@ export default function App() {
         onOpenAddModal={handleOpenAddRoot}
         onOpenCalcModal={() => setIsCalcModalOpen(true)}
         onOpenStatsModal={() => setIsStatsModalOpen(true)}
+        onOpenPrintModal={() => setIsPrintModalOpen(true)}
+        onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
+        onOpenInviteModal={() => setIsInviteModalOpen(true)}
         onExport={handleExport}
         onImport={handleImport}
         onReset={handleResetToDefault}
@@ -445,14 +529,39 @@ export default function App() {
         people={state.people}
       />
 
-      {/* Login / Identity Modal */}
+      {/* Chop etish uchun A4 Landscape Print View / PDF Modal */}
+      <PrintTreeModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        people={state.people}
+        rootId={state.rootId}
+        meId={state.meId}
+      />
+
+      {/* Shajara Tarixi / Audit Log Modal */}
+      <HistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
+
+      {/* Qarindoshlarni taklif qilish Modal */}
+      <InviteFamilyModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        people={state.people}
+        currentUser={state.currentUser}
+        onShowToast={showToast}
+      />
+
+      {/* Login & Register Modal */}
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         people={state.people}
         onLogin={handleLogin}
+        inviteCode={inviteCodeFromUrl}
+        targetPersonId={targetPersonFromUrl}
       />
     </div>
   );
 }
-
