@@ -1,8 +1,9 @@
-import { RegisteredAccount, AuthUser, FamilyInvite } from '../types';
+import { RegisteredAccount, AuthUser, FamilyInvite, TelegramWebUser } from '../types';
 
 const STORAGE_KEY_USERS = 'shajara_registered_users_v1';
 const STORAGE_KEY_CURRENT_USER = 'shajara_current_session_v1';
 const STORAGE_KEY_INVITES = 'shajara_family_invites_v1';
+const STORAGE_KEY_SUPABASE_SESSION = 'shajara_supabase_session_v1';
 
 // Boshlang'ich tizim admini / oila boshlig'i (namuna sifatida)
 const INITIAL_USERS: RegisteredAccount[] = [
@@ -16,6 +17,9 @@ const INITIAL_USERS: RegisteredAccount[] = [
     personId: 'p_me',
     role: 'owner',
     createdAt: Date.now() - 86400000 * 10,
+    telegramId: '123456789',
+    telegramUsername: 'shajarachi_admin',
+    authProvider: 'credentials',
   }
 ];
 
@@ -42,6 +46,8 @@ export function registerNewUser(data: {
   password: string;
   personId?: string | null;
   role?: 'owner' | 'editor' | 'viewer';
+  telegramId?: string | number;
+  telegramUsername?: string;
 }): { success: boolean; user?: RegisteredAccount; error?: string } {
   const users = getRegisteredUsers();
 
@@ -69,6 +75,9 @@ export function registerNewUser(data: {
     personId: data.personId || null,
     role: data.role || (users.length === 0 ? 'owner' : 'editor'),
     createdAt: Date.now(),
+    telegramId: data.telegramId,
+    telegramUsername: data.telegramUsername,
+    authProvider: 'credentials',
   };
 
   try {
@@ -107,6 +116,78 @@ export function loginUserWithCredentials(
   return { success: true, user: matched };
 }
 
+/**
+ * Telegram WebApp yoki Telegram Login orqali kirish
+ */
+export function loginWithTelegram(
+  tgUser: TelegramWebUser,
+  startParam?: string
+): { success: boolean; user: RegisteredAccount; isNew: boolean } {
+  const users = getRegisteredUsers();
+  const tgIdStr = String(tgUser.id);
+  const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || `Telegram User (${tgUser.id})`;
+
+  // Mavjud foydalanuvchini telegram_id orqali qidiramiz
+  let matched = users.find(u => String(u.telegramId) === tgIdStr);
+  let isNew = false;
+
+  if (matched) {
+    // Profilni yangilab qo'yamiz (agar ism yoki username o'zgargan bo'lsa)
+    matched.fullName = fullName;
+    matched.telegramUsername = tgUser.username || matched.telegramUsername;
+    matched.telegramPhotoUrl = tgUser.photo_url || matched.telegramPhotoUrl;
+
+    const updated = users.map(u => u.id === matched!.id ? matched! : u);
+    localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+  } else {
+    // Yangi foydalanuvchi ochamiz
+    isNew = true;
+    const newUser: RegisteredAccount = {
+      id: `usr_tg_${tgUser.id}`,
+      fullName,
+      birthDate: '2000-01-01',
+      email: tgUser.username ? `${tgUser.username}@telegram.org` : `tg_${tgUser.id}@shajara.uz`,
+      phone: `+998(TG)${tgUser.id}`,
+      passwordHash: `tg_oauth_${tgUser.id}`,
+      personId: null,
+      role: 'editor',
+      createdAt: Date.now(),
+      telegramId: tgUser.id,
+      telegramUsername: tgUser.username,
+      telegramPhotoUrl: tgUser.photo_url,
+      authProvider: 'telegram',
+    };
+
+    users.push(newUser);
+    matched = newUser;
+    localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
+  }
+
+  // Supabase Auth sessiyasi (JWT mock/token) saqlash
+  const mockJwt = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.tg_${tgUser.id}_${Date.now()}`;
+  localStorage.setItem(STORAGE_KEY_SUPABASE_SESSION, JSON.stringify({
+    access_token: mockJwt,
+    token_type: 'bearer',
+    user: {
+      id: matched.id,
+      telegram_id: tgUser.id,
+      full_name: matched.fullName,
+      role: matched.role,
+    },
+    expires_at: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 kun
+  }));
+
+  setCurrentSessionUser(matched);
+
+  // Agar taklif parametri bo'lsa (masalan: invite_usr_...)
+  if (startParam && startParam.startsWith('invite_')) {
+    const inviterId = startParam.replace('invite_', '');
+    console.log(`[Telegram Auth] Foydalanuvchi ${matched.fullName} (${matched.id}) taklif bilan kirdi: ${inviterId}`);
+  }
+
+  return { success: true, user: matched, isNew };
+}
+
 export function getCurrentSessionUser(): AuthUser | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CURRENT_USER);
@@ -133,6 +214,10 @@ export function setCurrentSessionUser(account: RegisteredAccount | AuthUser): vo
         personId: account.personId,
         role: account.role,
         isGuest: false,
+        telegramId: account.telegramId,
+        telegramUsername: account.telegramUsername,
+        telegramPhotoUrl: account.telegramPhotoUrl,
+        authProvider: account.authProvider || 'credentials',
       };
     } else {
       authUser = account;
@@ -146,6 +231,7 @@ export function setCurrentSessionUser(account: RegisteredAccount | AuthUser): vo
 export function logoutCurrentSession(): void {
   try {
     localStorage.removeItem(STORAGE_KEY_CURRENT_USER);
+    localStorage.removeItem(STORAGE_KEY_SUPABASE_SESSION);
   } catch (err) {
     console.error("Error logging out:", err);
   }
@@ -161,6 +247,11 @@ export function getFamilyInvites(): FamilyInvite[] {
   } catch {
     return [];
   }
+}
+
+export function generateTelegramBotInviteLink(userIdOrCode: string): string {
+  // @shajarachi_bot uchun taklif havolasi
+  return `https://t.me/shajarachi_bot?start=invite_${userIdOrCode}`;
 }
 
 export function createFamilyInvite(data: {
@@ -182,7 +273,8 @@ export function createFamilyInvite(data: {
     role: data.role,
     createdAt: Date.now(),
     acceptedCount: 0,
-    familyTreeName: data.familyTreeName || "7 Ajdod Shajarasi"
+    familyTreeName: data.familyTreeName || "7 Ajdod Shajarasi",
+    telegramBotInviteLink: generateTelegramBotInviteLink(code),
   };
 
   try {

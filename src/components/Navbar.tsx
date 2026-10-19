@@ -21,7 +21,8 @@ import {
   Search,
   Printer,
   History,
-  UserPlus
+  UserPlus,
+  Bot
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -39,6 +40,7 @@ interface NavbarProps {
   onOpenPrintModal: () => void;
   onOpenHistoryModal: () => void;
   onOpenInviteModal: () => void;
+  onOpenTelegramBotModal: () => void;
   onExport: () => void;
   onImport: (file: File) => void;
   onReset: () => void;
@@ -60,6 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenPrintModal,
   onOpenHistoryModal,
   onOpenInviteModal,
+  onOpenTelegramBotModal,
   onExport,
   onImport,
   onReset,
@@ -169,6 +172,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Taklif qilish</span>
+            </button>
+
+            {/* Telegram Bot & WebApp */}
+            <button
+              id="btn-nav-telegram-bot"
+              onClick={onOpenTelegramBotModal}
+              className="flex px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/60 dark:hover:bg-sky-900/60 text-[#24A1DE] dark:text-sky-300 border border-sky-200/80 dark:border-sky-800/60 text-xs font-bold items-center gap-1.5 transition-colors shadow-xs"
+              title="Telegram Bot va WebApp integratsiyasi (@shajarachi_bot)"
+            >
+              <Bot className="w-3.5 h-3.5 text-[#24A1DE]" />
+              <span className="hidden md:inline">Telegram Bot</span>
             </button>
 
             {/* Desktop: Chop etish uchun versiya (A4 Print / PDF) */}
@@ -410,6 +424,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div>
                   <div className="text-xs font-bold text-sky-950 dark:text-sky-200">Shajara Tarixi</div>
                   <div className="text-[10px] text-sky-700 dark:text-sky-400">O'zgarishlar jurnali</div>
+                </div>
+              </button>
+
+              {/* Telegram Bot */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onOpenTelegramBotModal();
+                }}
+                className="p-3.5 rounded-2xl bg-cyan-50/70 hover:bg-cyan-100/70 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 border border-cyan-200/80 dark:border-cyan-800/60 text-left transition-all flex flex-col gap-1.5"
+              >
+                <Bot className="w-5 h-5 text-[#24A1DE]" />
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">Telegram Bot</div>
+                  <div className="text-[10px] text-[#24A1DE] font-semibold">@shajarachi_bot</div>
                 </div>
               </button>
 

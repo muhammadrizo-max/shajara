@@ -6,9 +6,11 @@ interface FamilyTreeLogoProps {
 }
 
 /**
- * 1-rasmdagi oila daraxti ikonkasi (Family Tree SVG):
- * Yashil shox-shabbalar, daraxt tanasi, oilaviy shajara chiziqlari
- * va yuqori-pastki avlodlar (ko'k va qizil kiyimdagi shaxslar).
+ * 2-rasmdagi yangi zarhal (Gold Emblem) Oila Shajarasi logotipi:
+ * - Markazda geometrik oltinrang barglar va shajaralar toji
+ * - Tanada nafis xattotlik uslubidagi "Sh" (Shajara) harflari
+ * - Pastda o'zaro to'qilgan mustahkam ildizlar
+ * - Atrofda zarhalli rombsimon naqshlar
  */
 export const FamilyTreeLogo: React.FC<FamilyTreeLogoProps> = ({ 
   className = "w-8 h-8", 
@@ -16,158 +18,173 @@ export const FamilyTreeLogo: React.FC<FamilyTreeLogoProps> = ({
 }) => {
   return (
     <svg
-      viewBox="0 0 512 512"
+      viewBox="0 0 500 500"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       style={size ? { width: size, height: size } : undefined}
     >
-      {/* Daraxt tanasi va ildizlari (Trunk) */}
-      <path
-        d="M236 370H276L292 460L336 490H300L256 430L212 490H176L220 460L236 370Z"
-        fill="#C98144"
-        stroke="#111827"
-        strokeWidth="14"
-        strokeLinejoin="round"
-      />
-      {/* Tana vertikal to'qimasining chizig'i */}
-      <path
-        d="M256 405V430"
-        stroke="#8D5222"
-        strokeWidth="8"
-        strokeLinecap="round"
-      />
+      <defs>
+        {/* Realistik oltinrang metall gradiyenti (Rich Metallic Gold Gradient) */}
+        <linearGradient id="goldGradient" x1="50" y1="50" x2="450" y2="450" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#E5C158" />
+          <stop offset="25%" stopColor="#C99738" />
+          <stop offset="50%" stopColor="#F3DC82" />
+          <stop offset="75%" stopColor="#B37D24" />
+          <stop offset="100%" stopColor="#DFB74B" />
+        </linearGradient>
+        <filter id="goldGlow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#8c6218" floodOpacity="0.25" />
+        </filter>
+      </defs>
 
-      {/* Daraxt barglari qatlami (Canopy / Foliage) */}
-      <path
-        d="M256 24C190 24 150 70 148 108C110 112 80 142 80 186C80 200 84 214 91 226C65 242 48 274 48 312C48 368 94 412 152 412C160 412 168 411 176 408C194 424 220 434 256 434C292 434 318 424 336 408C344 411 352 412 360 412C418 412 464 368 464 312C464 274 447 242 421 226C428 214 432 200 432 186C432 142 402 112 364 108C362 70 322 24 256 24Z"
-        fill="#26BBA0"
-        stroke="#111827"
-        strokeWidth="16"
-        strokeLinejoin="round"
-      />
+      <g filter="url(#goldGlow)">
+        {/* Atrofdagi 4 ta zarhal romb naqshlari (Side diamond accents) */}
+        {/* Chapdagi romb */}
+        <g transform="translate(135, 320)">
+          <polygon points="0,-12 10,0 0,12 -10,0" fill="url(#goldGradient)" />
+          <polygon points="0,-5 4,0 0,5 -4,0" fill="#ffffff" opacity="0.3" />
+        </g>
+        {/* O'ngdagi romb */}
+        <g transform="translate(365, 320)">
+          <polygon points="0,-12 10,0 0,12 -10,0" fill="url(#goldGradient)" />
+          <polygon points="0,-5 4,0 0,5 -4,0" fill="#ffffff" opacity="0.3" />
+        </g>
 
-      {/* Ichki barg detallari va to'lqin soyalari */}
-      <path
-        d="M170 116C190 76 230 52 256 52C282 52 322 76 342 116"
-        stroke="#199E86"
-        strokeWidth="12"
-        strokeLinecap="round"
-      />
-
-      {/* Shajara bog'lovchi qora chiziqlari (Family Connections) */}
-      {/* Yuqori 2 kishi orasidagi rishta */}
-      <path
-        d="M188 172V220H324V172"
-        stroke="#111827"
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* Yuqoridan pastki avlodga tushuvchi vertikal markaziy ustun */}
-      <path
-        d="M256 220V310"
-        stroke="#111827"
-        strokeWidth="14"
-        strokeLinecap="round"
-      />
-      {/* Pastki gorizontal shox chizig'i (4 ta farzandga ulanadi) */}
-      <path
-        d="M68 310H444"
-        stroke="#111827"
-        strokeWidth="14"
-        strokeLinecap="round"
-      />
-      {/* Pastki o'rtadagi 2 kishiga vertikal ulanishlar */}
-      <path
-        d="M192 310V250H320V310"
-        stroke="#111827"
-        strokeWidth="14"
-        strokeLinejoin="round"
-      />
-      {/* 4 farzandning pastga tushuvchi kalta chiziqlari */}
-      <path
-        d="M68 310V330 M192 310V330 M320 310V330 M444 310V330"
-        stroke="#111827"
-        strokeWidth="14"
-        strokeLinecap="round"
-      />
-
-      {/* YUQORI QATOR (Ota-Ona) */}
-      {/* Ota (Ko'k) */}
-      <g id="person-top-left">
-        {/* Bosh/yuz */}
-        <circle cx="188" cy="116" r="28" fill="#FDB89E" stroke="#111827" strokeWidth="12" />
-        {/* Tana (Ko'k) */}
+        {/* TEPADAGI GEOMETRIK ZARHAL BARGLAR VA TOJ QISMI (Crown of the Tree) */}
+        {/* Eng yuqori markaziy barglar */}
         <path
-          d="M156 186V164C156 150 168 140 182 140H194C208 140 220 150 220 164V186H156Z"
-          fill="#2563EB"
-          stroke="#111827"
-          strokeWidth="12"
+          d="M250 80C240 100 240 120 250 145C260 120 260 100 250 80Z"
+          fill="url(#goldGradient)"
+        />
+        <path
+          d="M190 90C205 105 215 125 210 150C190 140 175 120 190 90Z"
+          fill="url(#goldGradient)"
+        />
+        <path
+          d="M310 90C325 120 310 140 290 150C285 125 295 105 310 90Z"
+          fill="url(#goldGradient)"
+        />
+
+        {/* Qanot barglari (Outer side leaflets) */}
+        <path
+          d="M135 130C155 140 170 160 165 185C145 180 130 160 135 130Z"
+          fill="url(#goldGradient)"
+        />
+        <path
+          d="M365 130C370 160 355 180 335 185C330 160 345 140 365 130Z"
+          fill="url(#goldGradient)"
+        />
+        <path
+          d="M95 190C120 195 135 215 130 240C105 240 90 220 95 190Z"
+          fill="url(#goldGradient)"
+        />
+        <path
+          d="M405 190C410 220 395 240 370 240C365 215 380 195 405 190Z"
+          fill="url(#goldGradient)"
+        />
+
+        {/* GEOMETRIK SHAXOBCHALAR (Symmetric Intersecting Gold Ribbons) */}
+        {/* Markaziy M va V shaklidagi zarhallangan tasmalar */}
+        <path
+          d="M250 125L210 165L170 125L130 165L170 205L210 165L250 205L290 165L330 205L370 165L330 125L290 165L250 125Z"
+          stroke="url(#goldGradient)"
+          strokeWidth="11"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* O'rta qatordagi kengayuvchi qanotlar */}
+        <path
+          d="M130 165L90 205L130 245L170 205 M370 165L410 205L370 245L330 205"
+          stroke="url(#goldGradient)"
+          strokeWidth="11"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* Markaziy Rombik Qalb (Central Diamond Core) */}
+        <path
+          d="M250 195L305 250L250 305L195 250Z"
+          stroke="url(#goldGradient)"
+          strokeWidth="11"
           strokeLinejoin="round"
         />
-      </g>
 
-      {/* Ona (Qizil/Pushti) */}
-      <g id="person-top-right">
-        {/* Bosh/yuz */}
-        <circle cx="324" cy="116" r="28" fill="#FDB89E" stroke="#111827" strokeWidth="12" />
-        {/* Tana (Qizil) */}
+        {/* Pastki shox tarmog'i romb burchagidan tana tomon */}
         <path
-          d="M292 186V164C292 150 304 140 318 140H330C344 140 356 150 356 164V186H292Z"
-          fill="#E11D48"
-          stroke="#111827"
-          strokeWidth="12"
+          d="M195 250L150 295L210 295"
+          stroke="url(#goldGradient)"
+          strokeWidth="11"
           strokeLinejoin="round"
         />
-      </g>
-
-      {/* PASTKI QATOR (4 Farzand) */}
-      {/* Farzand 1: Qizil */}
-      <g id="child-1">
-        <circle cx="68" cy="360" r="28" fill="#FDB89E" stroke="#111827" strokeWidth="12" />
         <path
-          d="M36 430V408C36 394 48 384 62 384H74C88 384 100 394 100 408V430H36Z"
-          fill="#E11D48"
-          stroke="#111827"
-          strokeWidth="12"
+          d="M305 250L350 295L290 295"
+          stroke="url(#goldGradient)"
+          strokeWidth="11"
           strokeLinejoin="round"
         />
-      </g>
 
-      {/* Farzand 2: Ko'k */}
-      <g id="child-2">
-        <circle cx="192" cy="360" r="28" fill="#FDB89E" stroke="#111827" strokeWidth="12" />
+        {/* MARKAZIY "Sh" XATTOTLIK TANASI (Calligraphic 'Sh' Monogram Trunk) */}
+        {/* "S" harfi egri chizig'i (nafis zarhal harf) */}
         <path
-          d="M160 430V408C160 394 172 384 186 384H198C212 384 224 394 224 408V430H160Z"
-          fill="#2563EB"
-          stroke="#111827"
+          d="M225 295C210 290 185 300 185 320C185 345 235 340 235 365C235 385 205 390 185 375"
+          stroke="url(#goldGradient)"
           strokeWidth="12"
+          strokeLinecap="round"
+        />
+        {/* "h" harfi va daraxt tanasining tik poyasi */}
+        <path
+          d="M250 280V370"
+          stroke="url(#goldGradient)"
+          strokeWidth="12"
+          strokeLinecap="round"
+        />
+        <path
+          d="M250 325C265 315 285 315 295 330V370"
+          stroke="url(#goldGradient)"
+          strokeWidth="12"
+          strokeLinecap="round"
           strokeLinejoin="round"
         />
-      </g>
 
-      {/* Farzand 3: Qizil */}
-      <g id="child-3">
-        <circle cx="320" cy="360" r="28" fill="#FDB89E" stroke="#111827" strokeWidth="12" />
+        {/* PASTKI ILDIZLAR TO'QIMASI (Intertwined Golden Roots) */}
+        {/* Gorizontal ildiz asosi */}
         <path
-          d="M288 430V408C288 394 300 384 314 384H326C340 384 352 394 352 408V430H288Z"
-          fill="#E11D48"
-          stroke="#111827"
-          strokeWidth="12"
-          strokeLinejoin="round"
+          d="M130 375C170 355 330 355 370 375"
+          stroke="url(#goldGradient)"
+          strokeWidth="10"
+          strokeLinecap="round"
         />
-      </g>
 
-      {/* Farzand 4: Ko'k */}
-      <g id="child-4">
-        <circle cx="444" cy="360" r="28" fill="#FDB89E" stroke="#111827" strokeWidth="12" />
+        {/* Markaziy bog'langan chuqur ildizlar */}
         <path
-          d="M412 430V408C412 394 424 384 438 384H450C464 384 476 394 476 408V430H412Z"
-          fill="#2563EB"
-          stroke="#111827"
-          strokeWidth="12"
-          strokeLinejoin="round"
+          d="M250 370C250 400 230 420 250 445C270 420 250 400 250 370Z"
+          fill="url(#goldGradient)"
+        />
+        <path
+          d="M210 375C215 410 190 425 180 440"
+          stroke="url(#goldGradient)"
+          strokeWidth="10"
+          strokeLinecap="round"
+        />
+        <path
+          d="M290 375C285 410 310 425 320 440"
+          stroke="url(#goldGradient)"
+          strokeWidth="10"
+          strokeLinecap="round"
+        />
+        <path
+          d="M160 380C155 405 140 420 145 435"
+          stroke="url(#goldGradient)"
+          strokeWidth="9"
+          strokeLinecap="round"
+        />
+        <path
+          d="M340 380C345 405 360 420 355 435"
+          stroke="url(#goldGradient)"
+          strokeWidth="9"
+          strokeLinecap="round"
         />
       </g>
     </svg>

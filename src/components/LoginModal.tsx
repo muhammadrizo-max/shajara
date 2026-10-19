@@ -3,6 +3,7 @@ import { AuthUser, Person, RegisteredAccount } from '../types';
 import { 
   registerNewUser, 
   loginUserWithCredentials, 
+  loginWithTelegram,
   getRegisteredUsers,
   setCurrentSessionUser 
 } from '../utils/userAuthStorage';
@@ -180,6 +181,63 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     onLogin(authUser);
   };
 
+  // Telegram orqali parolsiz kirish
+  const handleTelegramLogin = () => {
+    setError('');
+    const twaUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    
+    if (twaUser) {
+      // Telegram WebApp ichida: to'g'ridan-to'g'ri Telegram ma'lumotlari bilan kirish
+      const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+      const res = loginWithTelegram(twaUser, startParam);
+      
+      const parts = res.user.fullName.split(' ');
+      const authUser: AuthUser = {
+        id: res.user.id,
+        name: parts[0] || res.user.fullName,
+        surname: parts.slice(1).join(' ') || undefined,
+        fullName: res.user.fullName,
+        email: res.user.email,
+        phone: res.user.phone,
+        personId: res.user.personId,
+        role: res.user.role,
+        isGuest: false,
+        telegramId: res.user.telegramId,
+        telegramUsername: res.user.telegramUsername,
+        telegramPhotoUrl: res.user.telegramPhotoUrl,
+        authProvider: 'telegram',
+      };
+      onLogin(authUser);
+    } else {
+      // Oddiy brauzerda: Telegram orqali kirish (Simulyatsiya yoki @shajarachi_bot)
+      const inputUsername = window.prompt("Telegram username yoki ID raqamingizni kiriting (masalan: shajarachi_user):", "shajarachi_user");
+      if (!inputUsername) return;
+
+      const mockTgUser = {
+        id: Math.floor(100000000 + Math.random() * 900000000),
+        first_name: inputUsername.replace('@', ''),
+        username: inputUsername.replace('@', ''),
+      };
+      const res = loginWithTelegram(mockTgUser);
+      const parts = res.user.fullName.split(' ');
+      const authUser: AuthUser = {
+        id: res.user.id,
+        name: parts[0] || res.user.fullName,
+        surname: parts.slice(1).join(' ') || undefined,
+        fullName: res.user.fullName,
+        email: res.user.email,
+        phone: res.user.phone,
+        personId: res.user.personId,
+        role: res.user.role,
+        isGuest: false,
+        telegramId: res.user.telegramId,
+        telegramUsername: res.user.telegramUsername,
+        authProvider: 'telegram',
+      };
+      onLogin(authUser);
+    }
+  };
+
   // Mehmon rejimi
   const handleGuestEntry = () => {
     const authUser: AuthUser = {
@@ -260,6 +318,39 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <div className="flex-1">{error}</div>
             </div>
           )}
+
+          {/* Telegram orqali tezkor kirish tugmasi */}
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-sky-50 to-cyan-50 dark:from-slate-800/80 dark:to-cyan-950/30 border border-sky-200 dark:border-sky-900/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#24A1DE] text-white flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.61 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.89.03-.25.38-.51 1.05-.78 4.12-1.79 6.87-2.97 8.25-3.54 3.92-1.63 4.74-1.91 5.27-1.92.12 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.19-.04.34z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Telegram orqali parolsiz kirish
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Telegram ID orqali avtomatik profil ochiladi
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleTelegramLogin}
+              className="px-3.5 py-2 rounded-xl bg-[#24A1DE] hover:bg-[#1E8BC0] text-white text-xs font-bold shadow-sm transition active:scale-95 shrink-0"
+            >
+              Kirish
+            </button>
+          </div>
+
+          <div className="relative flex items-center justify-center my-2">
+            <div className="border-t border-slate-200 dark:border-slate-700 w-full" />
+            <span className="bg-white dark:bg-slate-900 px-3 text-[11px] text-slate-400 uppercase tracking-wider shrink-0 font-medium">
+              Yoki email/telefon bilan
+            </span>
+          </div>
 
           {/* TAB 1: RO'YXATDAN O'TISH (REGISTER) */}
           {activeTab === 'register' && (

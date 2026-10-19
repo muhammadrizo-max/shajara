@@ -37,6 +37,11 @@ export interface AuthUser {
   personId?: string | null; // agar shajarada topilsa
   isGuest?: boolean;
   role?: 'owner' | 'editor' | 'viewer';
+  // Telegram integratsiya parametrlari
+  telegramId?: string | number;
+  telegramUsername?: string;
+  telegramPhotoUrl?: string;
+  authProvider?: 'credentials' | 'telegram' | 'guest';
 }
 
 export interface RegisteredAccount {
@@ -49,6 +54,10 @@ export interface RegisteredAccount {
   personId?: string | null;
   role: 'owner' | 'editor' | 'viewer';
   createdAt: number;
+  telegramId?: string | number;
+  telegramUsername?: string;
+  telegramPhotoUrl?: string;
+  authProvider?: 'credentials' | 'telegram';
 }
 
 export interface FamilyInvite {
@@ -62,6 +71,7 @@ export interface FamilyInvite {
   createdAt: number;
   acceptedCount: number;
   familyTreeName?: string;
+  telegramBotInviteLink?: string;
 }
 
 export type HistoryActionType = 
@@ -72,7 +82,8 @@ export type HistoryActionType =
   | 'tree_reset' 
   | 'tree_import' 
   | 'member_invited'
-  | 'user_registered';
+  | 'user_registered'
+  | 'telegram_connect';
 
 export interface HistoryRecord {
   id: string;
@@ -106,4 +117,72 @@ export interface RelativeRelationInfo {
   isDirectAncestor: boolean;
   isDirectDescendant: boolean;
   ancestorTitleUz?: string; // masalan: "Ota", "Bobo", "Katta bobo", "Bobokalon", "Qat bobo", "Avlod/Pusht"
+}
+
+// Telegram WebApp (TWA) global tiplari
+export interface TelegramWebUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  language_code?: string;
+  photo_url?: string;
+}
+
+export interface TelegramWebAppObject {
+  initData: string;
+  initDataUnsafe?: {
+    query_id?: string;
+    user?: TelegramWebUser;
+    auth_date?: string;
+    hash?: string;
+    start_param?: string;
+  };
+  version?: string;
+  platform?: string;
+  colorScheme?: 'light' | 'dark';
+  themeParams?: {
+    bg_color?: string;
+    text_color?: string;
+    hint_color?: string;
+    link_color?: string;
+    button_color?: string;
+    button_text_color?: string;
+    secondary_bg_color?: string;
+  };
+  isExpanded?: boolean;
+  viewportHeight?: number;
+  ready: () => void;
+  expand: () => void;
+  close: () => void;
+  openLink?: (url: string) => void;
+  openTelegramLink?: (url: string) => void;
+  showAlert?: (message: string, callback?: () => void) => void;
+  showConfirm?: (message: string, callback?: (confirmed: boolean) => void) => void;
+  MainButton?: {
+    text: string;
+    color: string;
+    textColor: string;
+    isVisible: boolean;
+    isActive: boolean;
+    show: () => void;
+    hide: () => void;
+    enable: () => void;
+    disable: () => void;
+    setText: (text: string) => void;
+    onClick: (callback: () => void) => void;
+    offClick: (callback: () => void) => void;
+  };
+  HapticFeedback?: {
+    impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
+    notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
+  };
+}
+
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp: TelegramWebAppObject;
+    };
+  }
 }

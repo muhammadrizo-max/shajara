@@ -22,6 +22,8 @@ import { LoginModal } from './components/LoginModal';
 import { PrintTreeModal } from './components/PrintTreeModal';
 import { HistoryModal } from './components/HistoryModal';
 import { InviteFamilyModal } from './components/InviteFamilyModal';
+import { TelegramBotModal } from './components/TelegramBotModal';
+import { initTelegramWebApp } from './utils/telegramAuth';
 import { 
   Search, 
   CheckCircle2, 
@@ -58,6 +60,7 @@ export default function App() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
+  const [isTelegramBotModalOpen, setIsTelegramBotModalOpen] = useState<boolean>(false);
 
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
@@ -66,6 +69,29 @@ export default function App() {
   const [isCalcModalOpen, setIsCalcModalOpen] = useState<boolean>(false);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'warn' } | null>(null);
+
+  // Telegram WebApp (TWA) avtomatik ishga tushirish va auto-login
+  useEffect(() => {
+    initTelegramWebApp((tgUser) => {
+      const parts = [tgUser.first_name, tgUser.last_name].filter(Boolean);
+      const authUser: AuthUser = {
+        name: parts[0] || 'Telegram',
+        surname: parts.slice(1).join(' ') || undefined,
+        fullName: parts.join(' '),
+        telegramId: tgUser.id,
+        telegramUsername: tgUser.username,
+        role: 'editor',
+        isGuest: false,
+        authProvider: 'telegram',
+      };
+      setState((prev) => ({
+        ...prev,
+        currentUser: authUser,
+      }));
+      setIsLoginModalOpen(false);
+      showToast(`Telegram orqali xush kelibsiz, ${authUser.fullName}!`, 'success');
+    });
+  }, []);
 
   // Check URL parameters for invite links (?invite=ABC123)
   useEffect(() => {
@@ -384,6 +410,7 @@ export default function App() {
         onOpenPrintModal={() => setIsPrintModalOpen(true)}
         onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
         onOpenInviteModal={() => setIsInviteModalOpen(true)}
+        onOpenTelegramBotModal={() => setIsTelegramBotModalOpen(true)}
         onExport={handleExport}
         onImport={handleImport}
         onReset={handleResetToDefault}
@@ -551,6 +578,13 @@ export default function App() {
         people={state.people}
         currentUser={state.currentUser}
         onShowToast={showToast}
+      />
+
+      {/* Telegram Bot va WebApp integratsiya boshqaruvi */}
+      <TelegramBotModal
+        isOpen={isTelegramBotModalOpen}
+        onClose={() => setIsTelegramBotModalOpen(false)}
+        currentUser={state.currentUser}
       />
 
       {/* Login & Register Modal */}

@@ -14,7 +14,8 @@ import {
   Sparkles, 
   QrCode,
   Link,
-  MessageCircle
+  MessageCircle,
+  Bot
 } from 'lucide-react';
 
 interface InviteFamilyModalProps {
@@ -227,6 +228,20 @@ export const InviteFamilyModal: React.FC<InviteFamilyModalProps> = ({
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Telegramda ulashish</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const botLink = `https://t.me/shajarachi_bot?start=invite_${latestInvite.code}`;
+                    navigator.clipboard.writeText(botLink);
+                    onShowToast("Telegram Bot taklif havolasi nusxalandi!", "success");
+                  }}
+                  className="py-2 px-3.5 rounded-xl bg-[#24A1DE] hover:bg-[#1E8BC0] text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                  title="Telegram Bot orqali taklif havolasi (t.me/shajarachi_bot?start=invite_...)"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Bot Taklif Linki</span>
                 </button>
               </div>
             </div>
