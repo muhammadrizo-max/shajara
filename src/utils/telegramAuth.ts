@@ -1,6 +1,6 @@
 import { TelegramWebUser } from '../types';
-import { loginWithTelegram } from './userAuthStorage';
 import { addHistoryRecord } from './historyStorage';
+import { loadUserDataFromSupabase, DbLoadResult } from './supabaseDb';
 
 export interface TelegramAuthStatus {
   isAvailable: boolean;
@@ -10,38 +10,36 @@ export interface TelegramAuthStatus {
   themeColorScheme?: 'light' | 'dark';
 }
 
-/**
- * Brauzerda yoki Telegram WebApp ichida ekanligini aniqlash
- */
 export function getTelegramWebAppStatus(): TelegramAuthStatus {
   if (typeof window === 'undefined') {
-    return {
-      isAvailable: false,
-      isInsideTelegram: false,
-      user: null,
-    };
+    return { isAvailable: false, isInsideTelegram: false, user: null };
   }
-
   const tg = window.Telegram?.WebApp;
   const isAvailable = Boolean(tg);
   const unsafeData = tg?.initDataUnsafe;
   const user = unsafeData?.user || null;
-  const isInsideTelegram = Boolean(user && user.id);
-  const startParam = unsafeData?.start_param;
-
   return {
     isAvailable,
-    isInsideTelegram,
+    isInsideTelegram: Boolean(user?.id),
     user,
-    startParam,
+    startParam: unsafeData?.start_param,
     themeColorScheme: tg?.colorScheme,
   };
 }
 
 /**
- * Telegram WebApp'ni ishga tushirish (ready & expand)
+ * Telegram WebApp ni ishga tushirish.
+ * Agar foydalanuvchi Telegram ichida bo'lsa:
+ *   1. Supabase'dan uning persons va family ma'lumotlarini yuklaydi.
+ *   2. onDbLoaded callback orqali App.tsx ga uzatadi.
+ *   3. Agar bazada topilmasa (hali botda ro'yxatdan o'tmagan),
+ *      onNotRegistered callback ishlaydi — foydalanuvchiga bot havolasini ko'rsatish kerak.
  */
-export function initTelegramWebApp(onAutoLogin?: (user: TelegramWebUser) => void): boolean {
+export function initTelegramWebApp(
+  onAutoLogin?: (user: TelegramWebUser) => void,
+  onDbLoaded?: (result: DbLoadResult) => void,
+  onNotRegistered?: (user: TelegramWebUser) => void,
+): boolean {
   if (typeof window === 'undefined') return false;
 
   const tg = window.Telegram?.WebApp;
@@ -51,45 +49,52 @@ export function initTelegramWebApp(onAutoLogin?: (user: TelegramWebUser) => void
     tg.ready();
     tg.expand();
 
-    // Telegram rang mavzusini qo'llash
+    // Telegram mavzu ranglarini CSS o'zgaruvchilariga uzatish
     if (tg.themeParams?.bg_color) {
       document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color);
     }
+    if (tg.themeParams?.text_color) {
+      document.documentElement.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color);
+    }
+    if (tg.themeParams?.button_color) {
+      document.documentElement.style.setProperty('--tg-theme-button-color', tg.themeParams.button_color);
+    }
 
     const tgUser = tg.initDataUnsafe?.user;
-    if (tgUser && tgUser.id) {
-      // Telegram ichida ochilgan! Avtomatik tizimga kiritamiz
-      const startParam = tg.initDataUnsafe?.start_param;
-      const result = loginWithTelegram(tgUser, startParam);
+    if (!tgUser?.id) return false;
 
-      if (result.success) {
+    // Avval onAutoLogin ni chaqirib, UI ni bloklarsiz ko'rsatamiz
+    if (onAutoLogin) onAutoLogin(tgUser);
+
+    // Keyin Supabase'dan ma'lumot yuklaymiz (async)
+    loadUserDataFromSupabase(tgUser.id).then((result) => {
+      if (result.success && onDbLoaded) {
         addHistoryRecord({
           action: 'telegram_connect',
-          actorName: result.user.fullName,
-          title: "Telegram orqali tizimga ulanildi",
-          description: `Telegram WebApp orqali ${result.isNew ? "ro'yxatdan o'tdi" : "tizimga kirdi"} (@${tgUser.username || tgUser.id})`,
-          details: `Telegram ID: ${tgUser.id}`
+          actorName: result.authUser?.fullName || '',
+          title: 'Telegram orqali tizimga ulanildi',
+          description: `Supabase'dan shajara ma'lumotlari yuklandi`,
+          details: `Telegram ID: ${tgUser.id}`,
         });
-        if (onAutoLogin) {
-          onAutoLogin(tgUser);
-        }
+        onDbLoaded(result);
+      } else if (!result.success && result.error === 'not_registered') {
+        // Botda ro'yxatdan o'tmagan — botga yo'naltirish kerak
+        if (onNotRegistered) onNotRegistered(tgUser);
       }
-      return true;
-    }
-  } catch (err) {
-    console.error("Telegram WebApp initialization error:", err);
-  }
+    }).catch((e) => {
+      console.error('supabaseDb load error:', e);
+    });
 
-  return false;
+    return true;
+  } catch (err) {
+    console.error('Telegram WebApp initialization error:', err);
+    return false;
+  }
 }
 
-/**
- * Telegram Bot havolasini ochish
- */
-export function openTelegramBot(botUsername: string = 'shajarachi_bot', startParam?: string): void {
+export function openTelegramBot(botUsername: string = 'shajarachibot', startParam?: string): void {
   const param = startParam ? `?start=${startParam}` : '';
   const url = `https://t.me/${botUsername}${param}`;
-
   if (window.Telegram?.WebApp?.openTelegramLink) {
     window.Telegram.WebApp.openTelegramLink(url);
   } else {
