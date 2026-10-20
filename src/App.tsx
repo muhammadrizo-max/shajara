@@ -25,6 +25,8 @@ import { HistoryModal } from './components/HistoryModal';
 import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
 import { initTelegramWebApp } from './utils/telegramAuth';
+  // (import o'zgarishsiz qoladi, lekin telegramAuth.ts almashtirilganidan
+  //  supabaseDb.ts ni ham src/utils/ ga qo'shish kerak)
 import { 
   Search, 
   CheckCircle2, 
@@ -71,27 +73,47 @@ export default function App() {
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'warn' } | null>(null);
 
-  // Telegram WebApp (TWA) avtomatik ishga tushirish va auto-login
+  // Telegram WebApp — Supabase'dan ma'lumot yuklaydigan versiya
   useEffect(() => {
-    initTelegramWebApp((tgUser) => {
-      const parts = [tgUser.first_name, tgUser.last_name].filter(Boolean);
-      const authUser: AuthUser = {
-        name: parts[0] || 'Telegram',
-        surname: parts.slice(1).join(' ') || undefined,
-        fullName: parts.join(' '),
-        telegramId: tgUser.id,
-        telegramUsername: tgUser.username,
-        role: 'editor',
-        isGuest: false,
-        authProvider: 'telegram',
-      };
-      setState((prev) => ({
-        ...prev,
-        currentUser: authUser,
-      }));
-      setIsLoginModalOpen(false);
-      showToast(`Telegram orqali xush kelibsiz, ${authUser.fullName}!`, 'success');
-    });
+    initTelegramWebApp(
+      // 1. Darhol (UI bloklanmaydi) — faqat ismni ko'rsatish
+      (tgUser) => {
+        const parts = [tgUser.first_name, tgUser.last_name].filter(Boolean);
+        const authUser: AuthUser = {
+          name: parts[0] || 'Telegram',
+          surname: parts.slice(1).join(' ') || undefined,
+          fullName: parts.join(' '),
+          telegramId: tgUser.id,
+          telegramUsername: tgUser.username,
+          role: 'editor',
+          isGuest: false,
+          authProvider: 'telegram',
+        };
+        setState((prev) => ({ ...prev, currentUser: authUser }));
+        setIsLoginModalOpen(false);
+      },
+      // 2. Supabase'dan ma'lumot kelgach — people/rootId/meId ni yangilash
+      (result) => {
+        if (!result.success || !result.people) return;
+        setState((prev) => ({
+          ...prev,
+          people: result.people!,
+          rootId: result.rootId || prev.rootId,
+          meId: result.meId || prev.meId,
+          currentUser: result.authUser
+            ? { ...prev.currentUser, ...result.authUser }
+            : prev.currentUser,
+        }));
+        showToast('Shajarangiz yuklandi! 🌳', 'success');
+      },
+      // 3. Botda ro'yxatdan o'tmagan bo'lsa
+      (tgUser) => {
+        showToast(
+          `Salom ${tgUser.first_name}! Avval @shajarachibot da ro'yxatdan o'ting.`,
+          'warn'
+        );
+      }
+    );
   }, []);
 
   // Check URL parameters for invite links (?invite=ABC123)
