@@ -81,7 +81,18 @@ export const SevenAncestorsView: React.FC<SevenAncestorsViewProps> = ({
           </span>
         </div>
 
-        <div className="relative pl-6 sm:pl-10 space-y-6 before:absolute before:left-3 sm:before:left-5 before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-emerald-500 before:via-amber-400 before:to-amber-600">
+        {lineage.length === 0 ? (
+          <div className="p-8 sm:p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+            <Crown className="w-12 h-12 mx-auto text-amber-500/50" />
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+              Ajdodlar zanjiri hozircha bo'sh
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+              Shajara daraxtiga o'zingizni va ota-bobolaringizni qo'shsangiz, ushbu sahifada 7 ajdodingiz zanjiri avtomatik hisoblab ko'rsatiladi.
+            </p>
+          </div>
+        ) : (
+          <div className="relative pl-6 sm:pl-10 space-y-6 before:absolute before:left-3 sm:before:left-5 before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-emerald-500 before:via-amber-400 before:to-amber-600">
           {lineage.map((person, idx) => {
             const levelInfo = UZBEK_ANCESTOR_TITLES[idx] || {
               title: `${idx}-ajdod`,
@@ -232,6 +243,7 @@ export const SevenAncestorsView: React.FC<SevenAncestorsViewProps> = ({
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Traditional Uzbek 7 Ancestors Educational Matrix */}

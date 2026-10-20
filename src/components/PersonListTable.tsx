@@ -125,11 +125,24 @@ export const PersonListTable: React.FC<PersonListTableProps> = ({
       </div>
 
       {/* People Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredPeople.map((person) => {
-          const isMe = person.id === meId;
-          const isTemporaryPerspective = activePerspectiveId === person.id;
-          const isMale = person.gender === 'male';
+      {filteredPeople.length === 0 ? (
+        <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          <Users className="w-12 h-12 mx-auto text-slate-400" />
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+            Shajarada a'zolar topilmadi
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            {search || filterGen !== 'all' || filterGender !== 'all'
+              ? "Qidiruv yoki filtr bo'yicha hech qanday shaxs topilmadi."
+              : "Hozircha shajaraga a'zolar kiritilmagan. Yangi shaxs qo'shing yoki Telegram bot orqali to'ldiring."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredPeople.map((person) => {
+            const isMe = person.id === meId;
+            const isTemporaryPerspective = activePerspectiveId === person.id;
+            const isMale = person.gender === 'male';
           const kinship = calculateKinship(effectiveMeId, person.id, people);
           const parent = person.parentId ? people[person.parentId] : null;
           const canEdit = Boolean(currentUser && currentUser.personId === person.id);
@@ -274,6 +287,7 @@ export const PersonListTable: React.FC<PersonListTableProps> = ({
           );
         })}
       </div>
+      )}
     </div>
   );
 };

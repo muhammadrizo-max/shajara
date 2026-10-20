@@ -1,7 +1,7 @@
 import { FamilyTreeState, Person } from '../types';
 import { DEFAULT_ME_ID, DEFAULT_ROOT_ID, INITIAL_PEOPLE } from '../data/initialData';
 
-const STORAGE_KEY = 'uz_shajara_7ajdod_data_v2';
+const STORAGE_KEY = 'shajara_clean_user_tree_v3';
 
 export function loadFamilyTreeState(): FamilyTreeState {
   try {
@@ -11,8 +11,8 @@ export function loadFamilyTreeState(): FamilyTreeState {
       if (parsed && parsed.people && Object.keys(parsed.people).length > 0) {
         return {
           people: parsed.people,
-          rootId: parsed.rootId || DEFAULT_ROOT_ID,
-          meId: parsed.meId || DEFAULT_ME_ID,
+          rootId: parsed.rootId || Object.keys(parsed.people)[0] || '',
+          meId: parsed.meId || Object.keys(parsed.people)[0] || '',
           currentUser: parsed.currentUser || null,
           activePerspectiveId: parsed.activePerspectiveId || undefined,
         };
@@ -22,17 +22,12 @@ export function loadFamilyTreeState(): FamilyTreeState {
     console.error('Failed to load shajara state from localStorage:', err);
   }
 
+  // Butunlay toza bo'sh shajara (hech qanday default odamlar qolmagan)
   return {
-    people: INITIAL_PEOPLE,
-    rootId: DEFAULT_ROOT_ID,
-    meId: 'p_muhammadrizo', // Standart Muhammadrizo Xudoberdiyev
-    currentUser: {
-      name: 'Muhammadrizo',
-      surname: 'Xudoberdiyev',
-      birthDate: '2005-05-15',
-      personId: 'p_muhammadrizo',
-      isGuest: false,
-    },
+    people: INITIAL_PEOPLE, // {}
+    rootId: DEFAULT_ROOT_ID, // ''
+    meId: DEFAULT_ME_ID, // ''
+    currentUser: null,
     activePerspectiveId: undefined,
   };
 }
@@ -42,6 +37,24 @@ export function saveFamilyTreeState(state: FamilyTreeState): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (err) {
     console.error('Failed to save shajara state to localStorage:', err);
+  }
+}
+
+/**
+ * Saytdagi barcha ma'lumotlarni butunlay tozalash (LocalStorage tozalash)
+ */
+export function clearAllShajaraData(): void {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('shajara_') || key.startsWith('uz_shajara_'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (e) {
+    console.error('Failed to clear shajara data:', e);
   }
 }
 
@@ -61,7 +74,7 @@ export function importStateFromJSON(file: File): Promise<FamilyTreeState> {
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (parsed && parsed.people) {
+        if (parsed && typeof parsed === 'object' && parsed.people) {
           resolve(parsed as FamilyTreeState);
         } else {
           reject(new Error("Fayl formati noto'g'ri"));

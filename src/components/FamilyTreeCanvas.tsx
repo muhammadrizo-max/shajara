@@ -12,8 +12,13 @@ import {
   UserCheck,
   FoldVertical,
   UnfoldVertical,
-  Maximize2
+  Maximize2,
+  Plus,
+  Bot,
+  UserPlus,
+  Sparkles
 } from 'lucide-react';
+import { FamilyTreeLogo } from './FamilyTreeLogo';
 
 interface FamilyTreeCanvasProps {
   people: Record<string, Person>;
@@ -29,6 +34,9 @@ interface FamilyTreeCanvasProps {
   onSetTemporaryPerspective: (personId: string) => void;
   onClearTemporaryPerspective: () => void;
   onUnauthorizedEditAttempt: () => void;
+  onOpenAddRoot?: () => void;
+  onOpenLoginModal?: () => void;
+  onOpenTelegramBotModal?: () => void;
 }
 
 export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
@@ -45,6 +53,9 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   onSetTemporaryPerspective,
   onClearTemporaryPerspective,
   onUnauthorizedEditAttempt,
+  onOpenAddRoot,
+  onOpenLoginModal,
+  onOpenTelegramBotModal,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<number>(0.85);
@@ -494,7 +505,58 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
         }}
       >
         <div className="inline-block p-8 sm:p-12 min-w-max">
-          {renderTreeNode(rootId)}
+          {rootId && people[rootId] ? (
+            renderTreeNode(rootId)
+          ) : (
+            <div className="flex flex-col items-center justify-center p-8 sm:p-12 max-w-lg mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl text-center space-y-4">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-xl p-2.5">
+                <FamilyTreeLogo className="w-14 h-14" />
+              </div>
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                  Shajarangiz Hozircha Bo'sh
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
+                  Saytdagi barcha default ma'lumotlar tozalangan. O'z oilangiz va 7 ajdodingiz shajarasini yaratishni hoziroq boshlang!
+                </p>
+              </div>
+
+              <div className="flex flex-col w-full gap-2.5 pt-2">
+                {!currentUser && onOpenLoginModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenLoginModal}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Ro'yxatdan o'tish (Shajara yaratish)</span>
+                  </button>
+                )}
+
+                {onOpenAddRoot && (
+                  <button
+                    type="button"
+                    onClick={onOpenAddRoot}
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    <span>+ Birinchi Shaxsni Qo'shish</span>
+                  </button>
+                )}
+
+                {onOpenTelegramBotModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenTelegramBotModal}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#24A1DE]/10 hover:bg-[#24A1DE]/20 text-[#24A1DE] dark:text-cyan-400 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                  >
+                    <Bot className="w-4 h-4" />
+                    <span>Python Telegram Bot (@shajarachi_bot) orqali kiritish</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

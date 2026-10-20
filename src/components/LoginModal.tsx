@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { AuthUser, Person, RegisteredAccount } from '../types';
+import { AuthUser, Gender, Person, RegisteredAccount } from '../types';
 import { 
   registerNewUser, 
   loginUserWithCredentials, 
   loginWithTelegram,
-  getRegisteredUsers,
   setCurrentSessionUser 
 } from '../utils/userAuthStorage';
 import { addHistoryRecord } from '../utils/historyStorage';
@@ -25,16 +24,17 @@ import {
   X, 
   UserPlus, 
   ShieldCheck,
-  Check
+  Bot
 } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose?: () => void;
   people: Record<string, Person>;
-  onLogin: (user: AuthUser) => void;
+  onLogin: (user: AuthUser, initialPersonData?: { gender: Gender }) => void;
   inviteCode?: string | null;
   targetPersonId?: string | null;
+  onOpenTelegramModal?: () => void;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -43,12 +43,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   people,
   onLogin,
   inviteCode,
-  targetPersonId
+  targetPersonId,
+  onOpenTelegramModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<'register' | 'login'>(inviteCode ? 'register' : 'login');
+  // Ilk marta kelgan foydalanuvchilar uchun boshlang'ich tab HAR DOIM 'register' (Ro'yxatdan o'tish)
+  const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   
   // Register state
   const [regFullName, setRegFullName] = useState<string>('');
+  const [regGender, setRegGender] = useState<Gender>('male');
   const [regBirthDate, setRegBirthDate] = useState<string>('');
   const [regEmail, setRegEmail] = useState<string>('');
   const [regPhone, setRegPhone] = useState<string>('+998 ');
@@ -61,29 +64,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const [error, setError] = useState<string>('');
-  const [successMsg, setSuccessMsg] = useState<string>('');
 
   useEffect(() => {
     if (targetPersonId) {
       setRegPersonId(targetPersonId);
     }
-    if (inviteCode) {
-      setActiveTab('register');
-    }
-  }, [targetPersonId, inviteCode]);
+  }, [targetPersonId]);
 
   if (!isOpen) return null;
 
   const peopleList = Object.values(people) as Person[];
+  const isTreeEmpty = peopleList.length === 0;
 
   // Ro'yxatdan o'tish
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccessMsg('');
 
     if (!regFullName.trim() || regFullName.trim().split(' ').length < 2) {
-      setError("Iltimos, to'liq ism va familiyangizni kiriting (masalan: Muhammadrizo Xudoberdiyev)");
+      setError("Iltimos, to'liq ism va familiyangizni kiriting (masalan: Alisher Navoiy)");
       return;
     }
     if (!regBirthDate) {
@@ -110,11 +109,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       phone: regPhone.trim(),
       password: regPassword,
       personId: regPersonId || undefined,
-      role: 'editor',
+      role: isTreeEmpty ? 'owner' : 'editor',
     });
 
     if (!res.success || !res.user) {
-      setError(res.error || "Ro'yxatdan o'tishda xatolik");
+      setError(res.error || "Ro'yxatdan o'tishda xatolik yuz berdi");
       return;
     }
 
@@ -122,8 +121,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     addHistoryRecord({
       action: 'user_registered',
       actorName: res.user.fullName,
-      title: "Yangi oila a'zosi ro'yxatdan o'tdi",
-      description: `${res.user.fullName} shajaraga qo'shildi va to'ldirish huquqiga ega bo'ldi.`,
+      title: "Yangi foydalanuvchi ro'yxatdan o'tdi",
+      description: `${res.user.fullName} ro'yxatdan o'tib, ${isTreeEmpty ? 'yangi shajara yaratuvchisi' : 'shajara a\'zosi'} bo'ldi.`,
       details: `Email: ${res.user.email}, Tel: ${res.user.phone}`
     });
 
@@ -139,9 +138,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       personId: res.user.personId,
       role: res.user.role,
       isGuest: false,
+      authProvider: 'credentials',
     };
 
-    onLogin(authUser);
+    onLogin(authUser, { gender: regGender });
   };
 
   // Kirish
@@ -176,18 +176,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       personId: res.user.personId,
       role: res.user.role,
       isGuest: false,
+      authProvider: res.user.authProvider || 'credentials',
     };
 
     onLogin(authUser);
   };
 
-  // Telegram orqali parolsiz kirish
+  // Telegram orqali tezkor va parolsiz kirish
   const handleTelegramLogin = () => {
     setError('');
     const twaUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
     
     if (twaUser) {
-      // Telegram WebApp ichida: to'g'ridan-to'g'ri Telegram ma'lumotlari bilan kirish
       const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
       const res = loginWithTelegram(twaUser, startParam);
       
@@ -207,10 +207,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         telegramPhotoUrl: res.user.telegramPhotoUrl,
         authProvider: 'telegram',
       };
-      onLogin(authUser);
+      onLogin(authUser, { gender: 'male' });
     } else {
-      // Oddiy brauzerda: Telegram orqali kirish (Simulyatsiya yoki @shajarachi_bot)
-      const inputUsername = window.prompt("Telegram username yoki ID raqamingizni kiriting (masalan: shajarachi_user):", "shajarachi_user");
+      const inputUsername = window.prompt("Telegram username yoki to'liq ismingizni kiriting:", "Alisher");
       if (!inputUsername) return;
 
       const mockTgUser = {
@@ -234,7 +233,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         telegramUsername: res.user.telegramUsername,
         authProvider: 'telegram',
       };
-      onLogin(authUser);
+      onLogin(authUser, { gender: 'male' });
     }
   };
 
@@ -250,7 +249,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
       <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-4 animate-in fade-in zoom-in-95 duration-200">
         
         {onClose && (
@@ -258,12 +257,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             type="button"
             onClick={onClose}
             className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors"
+            title="Yopish"
           >
             <X className="w-4 h-4" />
           </button>
         )}
 
-        {/* Top Header Banner with 1-rasmdagi daraxt logosi */}
+        {/* Top Header Banner */}
         <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 p-6 text-white text-center relative">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner mb-3 p-1">
             <FamilyTreeLogo className="w-12 h-12" />
@@ -274,27 +274,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <p className="text-emerald-100 text-xs mt-1 max-w-sm mx-auto">
             {inviteCode 
               ? "Siz oilaviy shajaraga taklif qilindingiz! Ro'yxatdan o'ting." 
-              : "Oila a'zolari bilan birgalikda shajara daraxtini tuzing va to'ldiring"}
+              : isTreeEmpty
+                ? "Yangi shajara yaratish uchun ro'yxatdan o'ting"
+                : "Oila a'zolari bilan birgalikda shajara daraxtini tuzing"}
           </p>
         </div>
 
-        {/* Tabs: Kirish vs Ro'yxatdan o'tish */}
+        {/* Tabs: Ro'yxatdan o'tish (birinchi) vs Kirish */}
         <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-1">
-          <button
-            onClick={() => {
-              setActiveTab('login');
-              setError('');
-            }}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'login'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <LogIn className="w-4 h-4" />
-            <span>Tizimga Kirish</span>
-          </button>
-
           <button
             onClick={() => {
               setActiveTab('register');
@@ -309,6 +296,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <UserPlus className="w-4 h-4" />
             <span>Ro'yxatdan O'tish</span>
           </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('login');
+              setError('');
+            }}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'login'
+                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Mavjud Hisobga Kirish</span>
+          </button>
         </div>
 
         <div className="p-6 space-y-4">
@@ -322,8 +324,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           {/* Telegram orqali tezkor kirish tugmasi */}
           <div className="p-3 rounded-2xl bg-gradient-to-r from-sky-50 to-cyan-50 dark:from-slate-800/80 dark:to-cyan-950/30 border border-sky-200 dark:border-sky-900/50 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#24A1DE] text-white flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+              <div className="w-9 h-9 rounded-xl bg-[#24A1DE] text-white flex items-center justify-center shrink-0 shadow-sm">
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.61 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.89.03-.25.38-.51 1.05-.78 4.12-1.79 6.87-2.97 8.25-3.54 3.92-1.63 4.74-1.91 5.27-1.92.12 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.19-.04.34z" />
                 </svg>
               </div>
@@ -332,7 +334,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   Telegram orqali parolsiz kirish
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Telegram ID orqali avtomatik profil ochiladi
+                  Python bot (@shajarachi_bot) orqali avtomatik bog'lanadi
                 </p>
               </div>
             </div>
@@ -341,20 +343,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               onClick={handleTelegramLogin}
               className="px-3.5 py-2 rounded-xl bg-[#24A1DE] hover:bg-[#1E8BC0] text-white text-xs font-bold shadow-sm transition active:scale-95 shrink-0"
             >
-              Kirish
+              Telegram bilan kirish
             </button>
           </div>
 
-          <div className="relative flex items-center justify-center my-2">
+          <div className="relative flex items-center justify-center my-1">
             <div className="border-t border-slate-200 dark:border-slate-700 w-full" />
             <span className="bg-white dark:bg-slate-900 px-3 text-[11px] text-slate-400 uppercase tracking-wider shrink-0 font-medium">
-              Yoki email/telefon bilan
+              Yoki quyidagi formani to'ldiring
             </span>
           </div>
 
           {/* TAB 1: RO'YXATDAN O'TISH (REGISTER) */}
           {activeTab === 'register' && (
-            <form onSubmit={handleRegister} className="space-y-3.5">
+            <form onSubmit={handleRegister} className="space-y-3">
               {/* To'liq Ism-familiya */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
@@ -365,15 +367,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="Masalan: Muhammadrizo Xudoberdiyev"
+                  placeholder="Masalan: Rustam Karimov"
                   value={regFullName}
                   onChange={(e) => setRegFullName(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
 
-              {/* Tug'ilgan sana va Shajaradagi shaxs */}
+              {/* Jinsi va Tug'ilgan sana */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Jinsingiz</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={regGender}
+                    onChange={(e) => setRegGender(e.target.value as Gender)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium"
+                  >
+                    <option value="male">Erkak (O'g'il / Ota)</option>
+                    <option value="female">Ayol (Qiz / Ona)</option>
+                  </select>
+                </div>
+
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-emerald-600" />
@@ -387,25 +405,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     onChange={(e) => setRegBirthDate(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Shajaradagi o'rningiz</span>
-                  </label>
-                  <select
-                    value={regPersonId}
-                    onChange={(e) => setRegPersonId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value="">Yangi a'zo (Yaratish)</option>
-                    {peopleList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.surname || ''} ({p.generation}-pusht)
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
 
@@ -444,6 +443,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 </div>
               </div>
 
+              {/* Shajaradagi o'rni */}
+              {!isTreeEmpty && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Mavjud shajaradagi o'rningiz</span>
+                  </label>
+                  <select
+                    value={regPersonId}
+                    onChange={(e) => setRegPersonId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="">Yangi a'zo (Yaratish)</option>
+                    {peopleList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.surname || ''} ({p.generation}-pusht)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Parol */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
@@ -476,7 +497,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>Ro'yxatdan o'tish va Shajaraga kirish</span>
+                  <span>Ro'yxatdan o'tish va Shajarani boshlash</span>
                 </button>
               </div>
             </form>
@@ -542,23 +563,34 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   onClick={() => setActiveTab('register')}
                   className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold"
                 >
-                  Hisobingiz yo'qmi? Yangi ro'yxatdan o'tish →
+                  Yangi foydalanuvchimisiz? Ro'yxatdan o'tish →
                 </button>
               </div>
             </form>
           )}
 
-          {/* Guest Entry */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+          {/* Guest Entry & Telegram Bot info */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
             <button
               type="button"
               onClick={handleGuestEntry}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 py-1 px-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5"
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 py-1 px-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5"
             >
               <Eye className="w-3.5 h-3.5 text-slate-400" />
-              <span>Mehmon sifatida kirish (faqat ko'rish rejimi)</span>
+              <span>Mehmon sifatida ko'rish</span>
               <ArrowRight className="w-3 h-3" />
             </button>
+
+            {onOpenTelegramModal && (
+              <button
+                type="button"
+                onClick={onOpenTelegramModal}
+                className="text-xs font-semibold text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 py-1 px-2.5 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors inline-flex items-center gap-1.5"
+              >
+                <Bot className="w-3.5 h-3.5" />
+                <span>Python Bot ko'rsatmasi</span>
+              </button>
+            )}
           </div>
 
         </div>

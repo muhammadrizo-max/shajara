@@ -1,33 +1,17 @@
 import { RegisteredAccount, AuthUser, FamilyInvite, TelegramWebUser } from '../types';
 
-const STORAGE_KEY_USERS = 'shajara_registered_users_v1';
-const STORAGE_KEY_CURRENT_USER = 'shajara_current_session_v1';
-const STORAGE_KEY_INVITES = 'shajara_family_invites_v1';
-const STORAGE_KEY_SUPABASE_SESSION = 'shajara_supabase_session_v1';
+const STORAGE_KEY_USERS = 'shajara_clean_registered_users_v2';
+const STORAGE_KEY_CURRENT_USER = 'shajara_clean_current_session_v2';
+const STORAGE_KEY_INVITES = 'shajara_clean_family_invites_v2';
+const STORAGE_KEY_SUPABASE_SESSION = 'shajara_clean_supabase_session_v2';
 
-// Boshlang'ich tizim admini / oila boshlig'i (namuna sifatida)
-const INITIAL_USERS: RegisteredAccount[] = [
-  {
-    id: 'user_muhammadrizo',
-    fullName: 'Muhammadrizo Xudoberdiyev',
-    birthDate: '2005-05-15',
-    email: 'muhammadrizoxudoberdiyev834@gmail.com',
-    phone: '+998901234567',
-    passwordHash: 'admin123',
-    personId: 'p_me',
-    role: 'owner',
-    createdAt: Date.now() - 86400000 * 10,
-    telegramId: '123456789',
-    telegramUsername: 'shajarachi_admin',
-    authProvider: 'credentials',
-  }
-];
+// Yangi tizimda hech qanday default foydalanuvchi qoldirilmaydi (butunlay toza)
+const INITIAL_USERS: RegisteredAccount[] = [];
 
 export function getRegisteredUsers(): RegisteredAccount[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_USERS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(INITIAL_USERS));
       return INITIAL_USERS;
     }
     const parsed = JSON.parse(raw);
@@ -65,6 +49,8 @@ export function registerNewUser(data: {
     return { success: false, error: "Ushbu telefon raqami allaqachon ro'yxatdan o'tgan!" };
   }
 
+  const isFirstUser = users.length === 0;
+
   const newUser: RegisteredAccount = {
     id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     fullName: data.fullName.trim(),
@@ -73,7 +59,7 @@ export function registerNewUser(data: {
     phone: data.phone.trim(),
     passwordHash: data.password, // Frontend SPA xotirasi
     personId: data.personId || null,
-    role: data.role || (users.length === 0 ? 'owner' : 'editor'),
+    role: data.role || (isFirstUser ? 'owner' : 'editor'),
     createdAt: Date.now(),
     telegramId: data.telegramId,
     telegramUsername: data.telegramUsername,
@@ -105,7 +91,7 @@ export function loginUserWithCredentials(
   );
 
   if (!matched) {
-    return { success: false, error: "Bunday email yoki telefon raqamli foydalanuvchi topilmadi!" };
+    return { success: false, error: "Bunday email yoki telefon raqamli hisob topilmadi. Avval ro'yxatdan o'ting!" };
   }
 
   if (matched.passwordHash !== password) {
@@ -132,7 +118,6 @@ export function loginWithTelegram(
   let isNew = false;
 
   if (matched) {
-    // Profilni yangilab qo'yamiz (agar ism yoki username o'zgargan bo'lsa)
     matched.fullName = fullName;
     matched.telegramUsername = tgUser.username || matched.telegramUsername;
     matched.telegramPhotoUrl = tgUser.photo_url || matched.telegramPhotoUrl;
@@ -140,8 +125,8 @@ export function loginWithTelegram(
     const updated = users.map(u => u.id === matched!.id ? matched! : u);
     localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
   } else {
-    // Yangi foydalanuvchi ochamiz
     isNew = true;
+    const isFirstUser = users.length === 0;
     const newUser: RegisteredAccount = {
       id: `usr_tg_${tgUser.id}`,
       fullName,
@@ -150,7 +135,7 @@ export function loginWithTelegram(
       phone: `+998(TG)${tgUser.id}`,
       passwordHash: `tg_oauth_${tgUser.id}`,
       personId: null,
-      role: 'editor',
+      role: isFirstUser ? 'owner' : 'editor',
       createdAt: Date.now(),
       telegramId: tgUser.id,
       telegramUsername: tgUser.username,
@@ -179,7 +164,6 @@ export function loginWithTelegram(
 
   setCurrentSessionUser(matched);
 
-  // Agar taklif parametri bo'lsa (masalan: invite_usr_...)
   if (startParam && startParam.startsWith('invite_')) {
     const inviterId = startParam.replace('invite_', '');
     console.log(`[Telegram Auth] Foydalanuvchi ${matched.fullName} (${matched.id}) taklif bilan kirdi: ${inviterId}`);
@@ -250,7 +234,6 @@ export function getFamilyInvites(): FamilyInvite[] {
 }
 
 export function generateTelegramBotInviteLink(userIdOrCode: string): string {
-  // @shajarachi_bot uchun taklif havolasi
   return `https://t.me/shajarachi_bot?start=invite_${userIdOrCode}`;
 }
 

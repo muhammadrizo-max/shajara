@@ -237,10 +237,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 font-semibold">
-                  <Eye className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Mehmon rejimi</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={onOpenLoginModal}
+                  className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-bold hover:underline"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Ro'yxatdan o'tish</span>
+                </button>
               )}
 
               <button
@@ -514,7 +518,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="w-full py-2 px-3 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Shajarani boshlang'ich holatga qaytarish</span>
+                <span>Barcha ma'lumotlarni tozalash (Noldan boshlash)</span>
               </button>
             </div>
           </div>

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { AuthUser, FamilyTreeState, Person, ViewMode } from './types';
+import { AuthUser, FamilyTreeState, Gender, Person, ViewMode } from './types';
 import { 
   loadFamilyTreeState, 
   saveFamilyTreeState, 
   exportStateAsJSON, 
-  importStateFromJSON 
+  importStateFromJSON,
+  clearAllShajaraData
 } from './utils/storage';
 import { hydrateAllMediaUrls } from './utils/mediaStorage';
 import { addHistoryRecord } from './utils/historyStorage';
-import { getCurrentSessionUser } from './utils/userAuthStorage';
+import { getCurrentSessionUser, setCurrentSessionUser } from './utils/userAuthStorage';
 import { DEFAULT_ME_ID, DEFAULT_ROOT_ID, INITIAL_PEOPLE } from './data/initialData';
 import { Navbar } from './components/Navbar';
 import { FamilyTreeCanvas } from './components/FamilyTreeCanvas';
@@ -161,8 +162,57 @@ export default function App() {
   };
 
   // Login handler
-  const handleLogin = (user: AuthUser) => {
-    const actorName = user.fullName || user.name;
+  // Login handler
+  const handleLogin = (user: AuthUser, initialPersonData?: { gender: Gender }) => {
+    // Agar shajara bo'sh bo'lsa, yangi ro'yxatdan o'tgan foydalanuvchi o'zi birinchi a'zo (egasi) sifatida yaratiladi
+    if (Object.keys(state.people).length === 0) {
+      const newPersonId = `p_${Date.now()}`;
+      const newPerson: Person = {
+        id: newPersonId,
+        name: user.name,
+        surname: user.surname,
+        gender: initialPersonData?.gender || 'male',
+        parentId: null,
+        birthDate: user.birthDate,
+        birthYear: user.birthDate ? user.birthDate.slice(0, 4) : undefined,
+        generation: 1,
+        isAlive: true,
+        occupation: "Oila boshlig'i (Shajara egasi)",
+        avatarColor: initialPersonData?.gender === 'female' ? 'from-rose-500 to-pink-700' : 'from-emerald-600 to-teal-800',
+        notes: "Ushbu shajara daraxtining egasi va asoschisi.",
+      };
+
+      const updatedUser: AuthUser = {
+        ...user,
+        personId: newPersonId,
+        role: 'owner',
+      };
+      setCurrentSessionUser(updatedUser);
+
+      setState((prev) => ({
+        ...prev,
+        people: { [newPersonId]: newPerson },
+        rootId: newPersonId,
+        meId: newPersonId,
+        currentUser: updatedUser,
+        activePerspectiveId: undefined,
+      }));
+
+      addHistoryRecord({
+        action: 'person_add',
+        actorName: user.fullName || user.name,
+        personName: user.fullName || user.name,
+        personId: newPersonId,
+        title: "Yangi shajaraga asos solindi",
+        description: `${user.fullName || user.name} tomonidan shajara yaratildi va birinchi a'zo kiritildi.`,
+      });
+
+      setSelectedPerson(newPerson);
+      showToast(`Tabriklaymiz, ${user.name}! Shajarangiz yaratildi.`);
+      setIsLoginModalOpen(false);
+      return;
+    }
+
     if (user.personId && state.people[user.personId]) {
       setState((prev) => ({
         ...prev,
@@ -216,9 +266,12 @@ export default function App() {
 
     setState((prev) => {
       const updatedPeople = { ...prev.people, [person.id]: person };
+      const isFirst = Object.keys(prev.people).length === 0;
       return {
         ...prev,
         people: updatedPeople,
+        rootId: isFirst || !prev.rootId ? person.id : prev.rootId,
+        meId: isFirst || !prev.meId ? person.id : prev.meId,
       };
     });
 
@@ -350,27 +403,24 @@ export default function App() {
   };
 
   const handleResetToDefault = () => {
-    if (confirm("Shajarani boshlang'ich holatiga qaytarmoqchimisiz? Kiritilgan yangi ma'lumotlar o'chiriladi.")) {
+    if (confirm("Shajaradagi barcha ma'lumotlarni tozalab, yangidan noldan boshlamoqchimisiz?")) {
+      clearAllShajaraData();
       const freshState: FamilyTreeState = {
-        people: INITIAL_PEOPLE,
-        rootId: DEFAULT_ROOT_ID,
-        meId: DEFAULT_ME_ID,
-        currentUser: {
-          name: 'Muhammadrizo',
-          surname: 'Xudoberdiyev',
-          birthDate: '2005-05-15',
-          personId: 'p-muhammadrizo',
-          isGuest: false,
-        },
+        people: {},
+        rootId: '',
+        meId: '',
+        currentUser: null,
+        activePerspectiveId: undefined,
       };
       setState(freshState);
       addHistoryRecord({
         action: 'tree_reset',
-        actorName: 'Tizim',
-        title: "Boshlang'ich holatga qaytarildi",
-        description: "Shajara dastlabki 7 ajdod namunasiga qaytarildi.",
+        actorName: 'Foydalanuvchi',
+        title: "Barcha ma'lumotlar tozalandi",
+        description: "Shajara to'liq tozalanib, noldan boshlash holatiga keltirildi.",
       });
-      showToast("Boshlang'ich shajara ma'lumotlari qayta tiklandi!");
+      setIsLoginModalOpen(true);
+      showToast("Barcha ma'lumotlar tozalandi. Yangi ro'yxatdan o'tishingiz mumkin!");
     }
   };
 
@@ -479,6 +529,9 @@ export default function App() {
               onSetTemporaryPerspective={handleSetTemporaryPerspective}
               onClearTemporaryPerspective={handleClearTemporaryPerspective}
               onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
+              onOpenAddRoot={handleOpenAddRoot}
+              onOpenLoginModal={() => setIsLoginModalOpen(true)}
+              onOpenTelegramBotModal={() => setIsTelegramBotModalOpen(true)}
             />
           </div>
         )}
@@ -595,6 +648,7 @@ export default function App() {
         onLogin={handleLogin}
         inviteCode={inviteCodeFromUrl}
         targetPersonId={targetPersonFromUrl}
+        onOpenTelegramModal={() => setIsTelegramBotModalOpen(true)}
       />
     </div>
   );
