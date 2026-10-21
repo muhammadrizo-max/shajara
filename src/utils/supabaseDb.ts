@@ -43,7 +43,6 @@ function dbPersonToLocal(p: any, familyId: string): Person {
     location: p.location || undefined,
     notes: p.biography || undefined,
     generation: p.generation || 1,
-    order: p.display_order || 0,
   };
 }
 
