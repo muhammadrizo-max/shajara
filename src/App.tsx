@@ -24,7 +24,7 @@ import { PrintTreeModal } from './components/PrintTreeModal';
 import { HistoryModal } from './components/HistoryModal';
 import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
-import { initTelegramWebApp } from './utils/telegramAuth';
+import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
   // (import o'zgarishsiz qoladi, lekin telegramAuth.ts almashtirilganidan
   //  supabaseDb.ts ni ham src/utils/ ga qo'shish kerak)
 import { 
@@ -73,47 +73,56 @@ export default function App() {
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'warn' } | null>(null);
 
-  // Telegram WebApp — Supabase'dan ma'lumot yuklaydigan versiya
+  // Telegram WebApp — avval foydalanuvchi ma'lumotini kutamiz, keyin ishga tushiramiz
   useEffect(() => {
-    initTelegramWebApp(
-      // 1. Darhol (UI bloklanmaydi) — faqat ismni ko'rsatish
-      (tgUser) => {
-        const parts = [tgUser.first_name, tgUser.last_name].filter(Boolean);
-        const authUser: AuthUser = {
-          name: parts[0] || 'Telegram',
-          surname: parts.slice(1).join(' ') || undefined,
-          fullName: parts.join(' '),
-          telegramId: tgUser.id,
-          telegramUsername: tgUser.username,
-          role: 'editor',
-          isGuest: false,
-          authProvider: 'telegram',
-        };
-        setState((prev) => ({ ...prev, currentUser: authUser }));
-        setIsLoginModalOpen(false);
-      },
-      // 2. Supabase'dan ma'lumot kelgach — people/rootId/meId ni yangilash
-      (result) => {
-        if (!result.success || !result.people) return;
-        setState((prev) => ({
-          ...prev,
-          people: result.people!,
-          rootId: result.rootId || prev.rootId,
-          meId: result.meId || prev.meId,
-          currentUser: result.authUser
-            ? { ...prev.currentUser, ...result.authUser }
-            : prev.currentUser,
-        }));
-        showToast('Shajarangiz yuklandi! 🌳', 'success');
-      },
-      // 3. Botda ro'yxatdan o'tmagan bo'lsa
-      (tgUser) => {
-        showToast(
-          `Salom ${tgUser.first_name}! Avval @shajarachibot da ro'yxatdan o'ting.`,
-          'warn'
-        );
-      }
-    );
+    let cancelled = false;
+
+    (async () => {
+      const tgUser = await waitForTelegramUser(3000);
+      if (cancelled || !tgUser) return; // Telegram ichida bo'lmasa login formasi qoladi
+
+      initTelegramWebApp(
+        // 1. Darhol — login formasini yopamiz
+        (u) => {
+          const parts = [u.first_name, u.last_name].filter(Boolean);
+          const authUser: AuthUser = {
+            name: parts[0] || 'Telegram',
+            surname: parts.slice(1).join(' ') || undefined,
+            fullName: parts.join(' '),
+            telegramId: u.id,
+            telegramUsername: u.username,
+            role: 'editor',
+            isGuest: false,
+            authProvider: 'telegram',
+          };
+          setState((prev) => ({ ...prev, currentUser: authUser }));
+          setIsLoginModalOpen(false);
+        },
+        // 2. Supabase'dan ma'lumot kelgach
+        (result) => {
+          if (!result.success || !result.people) return;
+          setState((prev) => ({
+            ...prev,
+            people: result.people!,
+            rootId: result.rootId || prev.rootId,
+            meId: result.meId || prev.meId,
+            currentUser: result.authUser
+              ? { ...prev.currentUser, ...result.authUser }
+              : prev.currentUser,
+          }));
+          setIsLoginModalOpen(false);
+          showToast('Shajarangiz yuklandi! 🌳', 'success');
+        },
+        // 3. Botda ro'yxatdan o'tmagan
+        (u) => {
+          showToast(`Salom ${u.first_name}! Avval @shajarachi_bot da ro'yxatdan o'ting.`, 'warn');
+        }
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Check URL parameters for invite links (?invite=ABC123)
