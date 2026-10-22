@@ -101,3 +101,26 @@ export function openTelegramBot(botUsername: string = 'shajarachibot', startPara
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 }
+
+/**
+ * Telegram foydalanuvchi ma'lumotlari paydo bo'lguncha kutadi.
+ * Ba'zan WebView sahifa skriptlaridan keyin ma'lumotni beradi.
+ */
+export function waitForTelegramUser(timeoutMs = 3000): Promise<TelegramWebUser | null> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const u = window.Telegram?.WebApp?.initDataUnsafe?.user;
+      if (u?.id) {
+        resolve(u as TelegramWebUser);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        resolve(null);
+        return;
+      }
+      setTimeout(tick, 100);
+    };
+    tick();
+  });
+}
