@@ -673,7 +673,7 @@ export default function App() {
 
       {/* Login & Register Modal */}
       <LoginModal
-        isOpen={isLoginModalOpen}
+        isOpen={isLoginModalOpen && !window.Telegram?.WebApp?.initDataUnsafe?.user?.id}
         onClose={() => setIsLoginModalOpen(false)}
         people={state.people}
         onLogin={handleLogin}
