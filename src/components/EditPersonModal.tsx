@@ -27,8 +27,10 @@ interface EditPersonModalProps {
   onClose: () => void;
   personToEdit: Person | null;
   parentForNewChild: Person | null;
+  childForNewParent?: Person | null;
   people: Record<string, Person>;
   onSave: (person: Person) => void;
+  onSaveWithRelation?: (newPerson: Person, relatedPerson?: Person) => void;
 }
 
 const AVATAR_GRADIENTS = [
@@ -47,8 +49,10 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   onClose,
   personToEdit,
   parentForNewChild,
+  childForNewParent,
   people,
   onSave,
+  onSaveWithRelation,
 }) => {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const avatarVideoInputRef = useRef<HTMLInputElement>(null);
@@ -56,11 +60,14 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
 
   const isEditing = !!personToEdit;
   const isAddingChild = !!parentForNewChild;
+  const isAddingParent = !!childForNewParent;
 
   const [name, setName] = useState<string>(personToEdit?.name || '');
   const [surname, setSurname] = useState<string>(personToEdit?.surname || '');
   const [titleOrNickname, setTitleOrNickname] = useState<string>(personToEdit?.titleOrNickname || '');
-  const [gender, setGender] = useState<Gender>(personToEdit?.gender || 'male');
+  const [gender, setGender] = useState<Gender>(
+    personToEdit?.gender || (isAddingParent ? 'male' : 'male')
+  );
   const [parentId, setParentId] = useState<string | null>(
     personToEdit ? personToEdit.parentId : parentForNewChild ? parentForNewChild.id : null
   );
@@ -263,7 +270,20 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       generation: calculatedGeneration,
     };
 
-    onSave(updatedPerson);
+    if (isAddingParent && childForNewParent) {
+      const updatedChild: Person = {
+        ...childForNewParent,
+        parentId: updatedPerson.id,
+      };
+      if (onSaveWithRelation) {
+        onSaveWithRelation(updatedPerson, updatedChild);
+      } else {
+        onSave(updatedPerson);
+        onSave(updatedChild);
+      }
+    } else {
+      onSave(updatedPerson);
+    }
 
     if (!isEditing) {
       try {
@@ -296,12 +316,16 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white leading-tight">
               {isEditing
                 ? "Shaxs ma'lumotlarini tahrirlash"
+                : isAddingParent
+                ? `«${childForNewParent?.name}» uchun ota qo'shish`
                 : isAddingChild
                 ? `${parentForNewChild?.name}ga yangi farzand qo'shish`
                 : "Yangi shaxs qo'shish"}
             </h3>
             <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Ism, rasm yoki qisqa video avatar, tarjimai hol va video xotiralar
+              {isAddingParent
+                ? "Shajarada yuqori bo'g'in (ota / ajdod) kiritilmoqda"
+                : "Ism, rasm yoki qisqa video avatar, tarjimai hol va video xotiralar"}
             </p>
           </div>
 

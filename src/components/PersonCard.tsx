@@ -29,6 +29,7 @@ interface PersonCardProps {
   onSelect: (person: Person) => void;
   onEdit: (person: Person) => void;
   onAddChild: (parent: Person) => void;
+  onAddParent?: (child: Person) => void;
   onSetTemporaryPerspective: (personId: string) => void;
   onUnauthorizedEditAttempt?: () => void;
   isSelected?: boolean;
@@ -47,6 +48,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   onSelect,
   onEdit,
   onAddChild,
+  onAddParent,
   onSetTemporaryPerspective,
   onUnauthorizedEditAttempt,
   isSelected = false,
@@ -60,8 +62,9 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   const effectiveMeId = activePerspectiveId || meId;
   const kinship: RelativeRelationInfo = calculateKinship(effectiveMeId, person.id, people);
 
-  // Permission: Har bir shaxs faqatgina o'zining ma'lumotlarini tahrirlashi mumkin
-  const canEdit = Boolean(currentUser && currentUser.personId === person.id);
+  const isViewer = currentUser?.role === 'viewer';
+  const canEdit = !isViewer && Boolean(!currentUser || currentUser.personId === person.id || currentUser.role === 'owner');
+  const canAddRelative = !isViewer;
 
   const getBadgeColor = () => {
     if (person.id === effectiveMeId) return 'bg-emerald-500 text-white font-bold ring-2 ring-emerald-300';
@@ -261,25 +264,35 @@ export const PersonCard: React.FC<PersonCardProps> = ({
               </button>
             )}
 
-            {/* Add Child / Farzand qo'shish (Faqat o'zi uchun) */}
-            {canEdit ? (
+            {/* Add Parent / Ota qo'shish (Agar otasi hali kiritilmagan bo'lsa) */}
+            {(!person.parentId || !people[person.parentId]) && onAddParent && canAddRelative && (
+              <button
+                id={`btn-add-parent-${person.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddParent(person);
+                }}
+                title="Ushbu shaxsga ota qo'shish (Yuqori bo'g'in)"
+                className="px-2 py-1 rounded-lg text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-900/50 flex items-center gap-1 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Ota</span>
+              </button>
+            )}
+
+            {/* Add Child / Farzand qo'shish */}
+            {canAddRelative && (
               <button
                 id={`btn-add-child-${person.id}`}
-                onClick={() => onAddChild(person)}
-                title="O'zingizga farzand / zurriyot qo'shish"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddChild(person);
+                }}
+                title="Farzand / zurriyot qo'shish"
                 className="px-2 py-1 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 flex items-center gap-1 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Farzand</span>
-              </button>
-            ) : (
-              <button
-                id={`btn-add-child-locked-${person.id}`}
-                onClick={() => onUnauthorizedEditAttempt && onUnauthorizedEditAttempt()}
-                title="Farzand qo'shish yopiq (Siz faqat o'z profilingizga farzand qo'sha olasiz)"
-                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-not-allowed"
-              >
-                <Plus className="w-3.5 h-3.5 opacity-40" />
               </button>
             )}
           </div>

@@ -25,14 +25,70 @@ export const UZBEK_DESCENDANT_TITLES: Record<number, { title: string; desc: stri
 export function getLineageToRoot(personId: string, people: Record<string, Person>): Person[] {
   const path: Person[] = [];
   let current: Person | undefined = people[personId];
+  const seen = new Set<string>();
 
-  while (current) {
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
     path.push(current);
     if (!current.parentId) break;
     current = people[current.parentId];
   }
 
   return path;
+}
+
+// Find topmost root ancestor ID starting from any person in the tree
+export function findRootAncestorId(startId: string, people: Record<string, Person>): string {
+  if (!startId || !people[startId]) {
+    const all = Object.values(people);
+    return all.length > 0 ? all[0].id : '';
+  }
+  let currentId = startId;
+  const seen = new Set<string>();
+  while (currentId && people[currentId] && !seen.has(currentId)) {
+    seen.add(currentId);
+    const pId = people[currentId].parentId;
+    if (pId && people[pId]) {
+      currentId = pId;
+    } else {
+      break;
+    }
+  }
+  return currentId;
+}
+
+// Recalculate generations consistently from top roots down to descendants
+export function recalculateAllGenerations(people: Record<string, Person>): Record<string, Person> {
+  const updated = { ...people };
+  const allPeople = Object.values(updated);
+  if (allPeople.length === 0) return updated;
+
+  // Roots are people whose parentId is null or not present in people
+  const roots = allPeople.filter((p) => !p.parentId || !updated[p.parentId]);
+
+  const assignGen = (id: string, gen: number, visited: Set<string>) => {
+    if (visited.has(id) || !updated[id]) return;
+    visited.add(id);
+    updated[id] = { ...updated[id], generation: gen };
+    const children = Object.values(updated).filter((p) => p.parentId === id);
+    for (const child of children) {
+      assignGen(child.id, gen + 1, visited);
+    }
+  };
+
+  const visited = new Set<string>();
+  for (const root of roots) {
+    assignGen(root.id, 1, visited);
+  }
+
+  // Handle any disconnected or cyclic nodes
+  for (const p of allPeople) {
+    if (!visited.has(p.id)) {
+      assignGen(p.id, 1, visited);
+    }
+  }
+
+  return updated;
 }
 
 // Get all children of a person

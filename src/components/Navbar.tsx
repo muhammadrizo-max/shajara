@@ -45,6 +45,7 @@ interface NavbarProps {
   onImport: (file: File) => void;
   onReset: () => void;
   onCenterMe?: () => void;
+  onSelectPerson?: (person: Person) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -67,6 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onImport,
   onReset,
   onCenterMe,
+  onSelectPerson,
 }) => {
   const importFileRef = useRef<HTMLInputElement>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -357,169 +359,243 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
       </header>
 
-      {/* Mobile Tools Bottom Sheet / Drawer */}
+      {/* Right Sliding Sidebar Menu (Haqiqiy O'ng Tomondan Ochiladigan Sidebar) */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden md:hidden">
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop overlay */}
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div className="fixed inset-x-0 bottom-0 max-h-[85vh] bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl border-t border-slate-200 dark:border-slate-800 p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
-            {/* Sheet Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950 p-1 flex items-center justify-center">
-                  <FamilyTreeLogo className="w-6 h-6" />
+
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-8">
+            <div className="w-screen max-w-xs sm:max-w-sm bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col z-50 animate-in slide-in-from-right duration-200 overflow-y-auto">
+              {/* Sidebar Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 p-1 flex items-center justify-center">
+                    <FamilyTreeLogo className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
+                      Shajara Menyu
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      Barcha vositalar va sozlamalar
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Qo'shimcha vositalar</h3>
-                  <p className="text-[10px] text-slate-400">Shajarani boshqarish, chop etish va takliflar</p>
+
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* User profile section */}
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      {currentUser?.name ? currentUser.name.charAt(0) : (me ? me.name.charAt(0) : 'U')}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {currentUser?.fullName || (me ? `${me.name} ${me.surname || ''}` : 'Mehmon')}
+                      </div>
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                        {currentUser?.role === 'owner' ? 'Shajara Asoschisi' : (currentUser ? 'Oila A\'zosi' : 'Ro\'yxatdan o\'tilmagan')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenLoginModal();
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-100/80 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 transition-colors shrink-0"
+                  >
+                    {currentUser ? 'Almashtirish' : 'Kirish'}
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            {/* Action Grid */}
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              {/* Chop etish uchun A4 versiya */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onOpenPrintModal();
-                }}
-                className="p-3.5 rounded-2xl bg-amber-50/70 hover:bg-amber-100/70 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200/80 dark:border-amber-800/60 text-left transition-all flex flex-col gap-1.5"
-              >
-                <Printer className="w-5 h-5 text-amber-600" />
-                <div>
-                  <div className="text-xs font-bold text-amber-950 dark:text-amber-200">Chop etish (A4)</div>
-                  <div className="text-[10px] text-amber-700 dark:text-amber-400">PDF / Albom ko'rinishi</div>
+              {/* Navigation & Action items */}
+              <div className="p-4 space-y-4 flex-1">
+                {/* Asosiy ko'rinishlar */}
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
+                    Ko'rinishlar
+                  </div>
+                  <div className="grid grid-cols-1 gap-1">
+                    <button
+                      onClick={() => {
+                        onViewModeChange('tree');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
+                        viewMode === 'tree'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <FamilyTreeLogo className="w-4 h-4" />
+                      <span>Shajara Daraxti ko'rinishi</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        onViewModeChange('seven-ancestors');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
+                        viewMode === 'seven-ancestors'
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 font-bold'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <Scroll className="w-4 h-4 text-amber-500" />
+                      <span>7 Ajdod Zanjiri</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        onViewModeChange('list');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
+                        viewMode === 'list'
+                          ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 font-bold'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 text-sky-500" />
+                      <span>Barcha a'zolar ro'yxati ({peopleList.length})</span>
+                    </button>
+                  </div>
                 </div>
-              </button>
 
-              {/* Qarindoshlarni taklif qilish */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onOpenInviteModal();
-                }}
-                className="p-3.5 rounded-2xl bg-purple-50/70 hover:bg-purple-100/70 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200/80 dark:border-purple-800/60 text-left transition-all flex flex-col gap-1.5"
-              >
-                <UserPlus className="w-5 h-5 text-purple-600" />
-                <div>
-                  <div className="text-xs font-bold text-purple-950 dark:text-purple-200">Taklif qilish</div>
-                  <div className="text-[10px] text-purple-700 dark:text-purple-400">Oilaviy havola</div>
+                {/* Vositalar va ulashish */}
+                <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
+                    Xizmatlar & Integratsiya
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenTelegramBotModal();
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-[#24A1DE]/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bot className="w-4 h-4 text-[#24A1DE]" />
+                      <span>Telegram Bot (@shajarachi_bot)</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-[#24A1DE]">Ulashish</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenInviteModal();
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <UserPlus className="w-4 h-4 text-purple-600" />
+                      <span>Qarindoshlarni taklif qilish</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenPrintModal();
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Printer className="w-4 h-4 text-amber-600" />
+                      <span>Chop etish (A4 Albom / PDF)</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenCalcModal();
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calculator className="w-4 h-4 text-emerald-600" />
+                      <span>Menga kim bo'ladi?</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenHistoryModal();
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-sky-50 dark:hover:bg-sky-950/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <History className="w-4 h-4 text-sky-600" />
+                      <span>Shajara o'zgarishlar tarixi</span>
+                    </div>
+                  </button>
                 </div>
-              </button>
 
-              {/* Shajara Tarixi */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onOpenHistoryModal();
-                }}
-                className="p-3.5 rounded-2xl bg-sky-50/70 hover:bg-sky-100/70 dark:bg-sky-950/40 dark:hover:bg-sky-900/50 border border-sky-200/80 dark:border-sky-800/60 text-left transition-all flex flex-col gap-1.5"
-              >
-                <History className="w-5 h-5 text-sky-600" />
-                <div>
-                  <div className="text-xs font-bold text-sky-950 dark:text-sky-200">Shajara Tarixi</div>
-                  <div className="text-[10px] text-sky-700 dark:text-sky-400">O'zgarishlar jurnali</div>
+                {/* Zaxiralash */}
+                <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
+                    Zaxira & Fayllar
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onExport();
+                      }}
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
+                      <span>JSON Eksport</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        importFileRef.current?.click();
+                      }}
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>JSON Import</span>
+                    </button>
+                  </div>
                 </div>
-              </button>
 
-              {/* Telegram Bot */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onOpenTelegramBotModal();
-                }}
-                className="p-3.5 rounded-2xl bg-cyan-50/70 hover:bg-cyan-100/70 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 border border-cyan-200/80 dark:border-cyan-800/60 text-left transition-all flex flex-col gap-1.5"
-              >
-                <Bot className="w-5 h-5 text-[#24A1DE]" />
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Telegram Bot</div>
-                  <div className="text-[10px] text-[#24A1DE] font-semibold">@shajarachi_bot</div>
+                {/* Noldan boshlash / tozalash */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onReset();
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-medium flex items-center justify-center gap-2 transition-colors border border-rose-200/60 dark:border-rose-900/40"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Barcha ma'lumotlarni tozalash</span>
+                  </button>
                 </div>
-              </button>
-
-              {/* Kinship Calc */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onOpenCalcModal();
-                }}
-                className="p-3.5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/70 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 border border-emerald-200/80 dark:border-emerald-800/60 text-left transition-all flex flex-col gap-1.5"
-              >
-                <Calculator className="w-5 h-5 text-emerald-600" />
-                <div>
-                  <div className="text-xs font-bold text-emerald-950 dark:text-emerald-200">Menga kim bo'ladi?</div>
-                  <div className="text-[10px] text-emerald-700 dark:text-emerald-400">Qarindoshlik rishtasi</div>
-                </div>
-              </button>
-
-              {/* Export JSON */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onExport();
-                }}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left transition-all flex flex-col gap-1.5"
-              >
-                <Download className="w-5 h-5 text-slate-600" />
-                <div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">Eksport (JSON)</div>
-                  <div className="text-[10px] text-slate-400">Faylni saqlab olish</div>
-                </div>
-              </button>
-
-              {/* Import JSON */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  importFileRef.current?.click();
-                }}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left transition-all flex flex-col gap-1.5"
-              >
-                <Upload className="w-5 h-5 text-indigo-600" />
-                <div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">Import (JSON)</div>
-                  <div className="text-[10px] text-slate-400">Fayldan tiklash</div>
-                </div>
-              </button>
-            </div>
-
-            {/* Secondary actions */}
-            <div className="pt-2 space-y-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onOpenLoginModal();
-                }}
-                className="w-full py-2.5 px-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center justify-between transition-colors"
-              >
-                <span className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-emerald-600" />
-                  <span>Profilni o'zgartirish / Ro'yxatdan o'tish</span>
-                </span>
-                <span className="text-[10px] text-emerald-600 font-bold">
-                  {currentUser?.name || (me ? me.name : 'Kirish')}
-                </span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  onReset();
-                }}
-                className="w-full py-2 px-3 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Barcha ma'lumotlarni tozalash (Noldan boshlash)</span>
-              </button>
+              </div>
             </div>
           </div>
         </div>
@@ -581,21 +657,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </button>
 
-        {/* Focus on Me / Center Action */}
+        {/* Men (O'z profilini ochish va fokus qilish) */}
         <button
+          id="btn-bottom-nav-me"
           onClick={() => {
-            if (viewMode !== 'tree') {
-              onViewModeChange('tree');
-            }
-            if (onCenterMe) {
-              onCenterMe();
+            if (me) {
+              if (onSelectPerson) {
+                onSelectPerson(me);
+              }
+              if (viewMode !== 'tree') {
+                onViewModeChange('tree');
+              }
+              if (onCenterMe) {
+                onCenterMe();
+              }
+            } else {
+              onOpenLoginModal();
             }
           }}
-          className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-emerald-600 font-medium transition-all"
-          title="O'zimga fokus"
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+            me ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 hover:text-emerald-600 font-medium'
+          }`}
+          title="O'z profilingizni ochish"
         >
           <UserCheck className="w-5 h-5 text-emerald-600" />
-          <span className="text-[10px] mt-0.5">Men</span>
+          <span className="text-[10px] mt-0.5 font-bold">Men</span>
         </button>
       </nav>
     </>

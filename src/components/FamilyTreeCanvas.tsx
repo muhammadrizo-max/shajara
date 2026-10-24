@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { AuthUser, Person } from '../types';
 import { PersonCard } from './PersonCard';
-import { getChildren } from '../utils/kinship';
+import { getChildren, findRootAncestorId } from '../utils/kinship';
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -31,6 +31,7 @@ interface FamilyTreeCanvasProps {
   onSelectPerson: (person: Person) => void;
   onEditPerson: (person: Person) => void;
   onAddChild: (parent: Person) => void;
+  onAddParent?: (child: Person) => void;
   onSetTemporaryPerspective: (personId: string) => void;
   onClearTemporaryPerspective: () => void;
   onUnauthorizedEditAttempt: () => void;
@@ -50,6 +51,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   onSelectPerson,
   onEditPerson,
   onAddChild,
+  onAddParent,
   onSetTemporaryPerspective,
   onClearTemporaryPerspective,
   onUnauthorizedEditAttempt,
@@ -258,6 +260,30 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       .map((p) => p.id);
   }, [people]);
 
+  // Dynamically resolve all top root ancestors so that:
+  // 1. Any added parent or ancestor above meId is automatically at the top of the tree.
+  // 2. All branches/trees in people are rendered and never hidden.
+  const displayRoots = useMemo(() => {
+    const allPeople = Object.values(people) as Person[];
+    if (allPeople.length === 0) return [];
+
+    // Find all nodes that have no parent inside the current people dataset
+    const roots = allPeople
+      .filter((p) => !p.parentId || !people[p.parentId])
+      .map((p) => p.id);
+
+    if (roots.length === 0) {
+      const fallback = (rootId && people[rootId]) ? rootId : (meId && people[meId]) ? meId : allPeople[0].id;
+      return [fallback];
+    }
+
+    const primaryTarget = (meId && people[meId]) ? meId : (rootId && people[rootId]) ? rootId : roots[0];
+    const meRoot = findRootAncestorId(primaryTarget, people);
+
+    const orderedRoots = [meRoot, ...roots.filter((r) => r !== meRoot)];
+    return Array.from(new Set(orderedRoots));
+  }, [people, rootId, meId]);
+
   // Is everything open or closed
   const isAllExpanded = collapsedIds.size === 0;
 
@@ -330,6 +356,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
             onSelect={onSelectPerson}
             onEdit={onEditPerson}
             onAddChild={onAddChild}
+            onAddParent={onAddParent}
             onSetTemporaryPerspective={onSetTemporaryPerspective}
             onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
             isSelected={selectedPersonId === person.id}
@@ -505,8 +532,10 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
         }}
       >
         <div className="inline-block p-8 sm:p-12 min-w-max">
-          {rootId && people[rootId] ? (
-            renderTreeNode(rootId)
+          {displayRoots.length > 0 ? (
+            <div className="flex items-start justify-center gap-16">
+              {displayRoots.map((rId) => renderTreeNode(rId))}
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center p-8 sm:p-12 max-w-lg mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl text-center space-y-4">
               <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-xl p-2.5">

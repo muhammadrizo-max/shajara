@@ -24,10 +24,10 @@ export function getRegisteredUsers(): RegisteredAccount[] {
 
 export function registerNewUser(data: {
   fullName: string;
-  birthDate: string;
   email: string;
   phone: string;
-  password: string;
+  birthDate?: string;
+  password?: string;
   personId?: string | null;
   role?: 'owner' | 'editor' | 'viewer';
   telegramId?: string | number;
@@ -54,10 +54,10 @@ export function registerNewUser(data: {
   const newUser: RegisteredAccount = {
     id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     fullName: data.fullName.trim(),
-    birthDate: data.birthDate,
+    birthDate: data.birthDate || '',
     email: cleanEmail,
     phone: data.phone.trim(),
-    passwordHash: data.password, // Frontend SPA xotirasi
+    passwordHash: data.password || '123456', // Agar kiritilmasa oddiy standart parol
     personId: data.personId || null,
     role: data.role || (isFirstUser ? 'owner' : 'editor'),
     createdAt: Date.now(),

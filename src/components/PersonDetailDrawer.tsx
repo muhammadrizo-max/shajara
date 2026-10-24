@@ -31,6 +31,7 @@ interface PersonDetailDrawerProps {
   onSelectPerson: (person: Person) => void;
   onEditPerson: (person: Person) => void;
   onAddChild: (parent: Person) => void;
+  onAddParent?: (child: Person) => void;
   onSetTemporaryPerspective: (personId: string) => void;
   onDeletePerson: (personId: string) => void;
   onUnauthorizedEditAttempt?: () => void;
@@ -46,6 +47,7 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
   onSelectPerson,
   onEditPerson,
   onAddChild,
+  onAddParent,
   onSetTemporaryPerspective,
   onDeletePerson,
   onUnauthorizedEditAttempt,
@@ -355,7 +357,7 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
             {/* Relatives list (Parent, Children, Siblings) */}
             <div className="space-y-4">
               {/* Father/Parent */}
-              {parent && (
+              {parent ? (
                 <div>
                   <h5 className="text-[11px] font-bold text-slate-400 mb-2">Otasi</h5>
                   <button
@@ -375,6 +377,33 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-[11px] font-bold text-slate-400">Otasi (Bosh bo'g'in)</h5>
+                    {onAddParent && (
+                      <button
+                        onClick={() => onAddParent(person)}
+                        className="text-[11px] text-sky-600 font-semibold hover:underline flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Ota qo'shish</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center bg-slate-50/50 dark:bg-slate-800/30">
+                    <p className="text-xs text-slate-400 mb-2">Hozircha otasi kiritilmagan.</p>
+                    {onAddParent && (
+                      <button
+                        onClick={() => onAddParent(person)}
+                        className="px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/60 dark:hover:bg-sky-900/60 text-sky-700 dark:text-sky-300 font-semibold text-xs inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Otasini qo'shish</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

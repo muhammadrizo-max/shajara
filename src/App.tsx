@@ -25,8 +25,8 @@ import { HistoryModal } from './components/HistoryModal';
 import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
-  // (import o'zgarishsiz qoladi, lekin telegramAuth.ts almashtirilganidan
-  //  supabaseDb.ts ni ham src/utils/ ga qo'shish kerak)
+import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
+import { syncPersonToSupabase, fetchInviteFromSupabase } from './utils/supabaseDb';
 import { 
   Search, 
   CheckCircle2, 
@@ -68,6 +68,7 @@ export default function App() {
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
   const [parentForNewChild, setParentForNewChild] = useState<Person | null>(null);
+  const [childForNewParent, setChildForNewParent] = useState<Person | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCalcModalOpen, setIsCalcModalOpen] = useState<boolean>(false);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
@@ -125,16 +126,34 @@ export default function App() {
     };
   }, []);
 
-  // Check URL parameters for invite links (?invite=ABC123)
+  // Check URL parameters for invite links (?invite=ABC123 or ?slot=XYZ or tgWebAppStartParam)
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const inv = params.get('invite');
+      const inv = params.get('invite') || params.get('start_param');
+      const slot = params.get('slot');
       const pId = params.get('personId');
-      if (inv) {
-        setInviteCodeFromUrl(inv);
+      
+      const tgStart = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
+      const effectiveCode = inv || slot || (tgStart ? tgStart.replace('invite_', '').replace('slot_', '') : null);
+
+      if (effectiveCode) {
+        setInviteCodeFromUrl(effectiveCode);
         if (pId) setTargetPersonFromUrl(pId);
         setIsLoginModalOpen(true);
+
+        fetchInviteFromSupabase(effectiveCode).then((inviteData) => {
+          if (inviteData) {
+            if (inviteData.slotPersonId) {
+              setTargetPersonFromUrl(inviteData.slotPersonId);
+            }
+            if (inviteData.slotName) {
+              showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
+            } else {
+              showToast("Shajaraga xush kelibsiz! Taklifnoma tasdiqlandi.", 'success');
+            }
+          }
+        }).catch(() => {});
       }
     } catch (e) {
       console.warn("Could not parse URL query parameters:", e);
@@ -287,24 +306,23 @@ export default function App() {
     const isNew = !state.people[person.id];
     const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Oila a\'zosi';
 
-    // Permission check for modifying existing person
-    if (personToEdit && state.currentUser?.personId) {
-      if (personToEdit.id !== state.currentUser.personId) {
-        handleUnauthorizedEditAttempt();
-        return;
-      }
-    }
-
     setState((prev) => {
-      const updatedPeople = { ...prev.people, [person.id]: person };
+      let updatedPeople = { ...prev.people, [person.id]: person };
+      updatedPeople = recalculateAllGenerations(updatedPeople);
       const isFirst = Object.keys(prev.people).length === 0;
+      const targetMe = isFirst || !prev.meId ? person.id : prev.meId;
+      const newRootId = findRootAncestorId(targetMe, updatedPeople);
+
       return {
         ...prev,
         people: updatedPeople,
-        rootId: isFirst || !prev.rootId ? person.id : prev.rootId,
-        meId: isFirst || !prev.meId ? person.id : prev.meId,
+        rootId: newRootId,
+        meId: targetMe,
       };
     });
+
+    // Supabase bilan real sinxronlashtirish
+    syncPersonToSupabase(person).catch(() => {});
 
     // Audit log / Shajara tarixiga yozish
     addHistoryRecord({
@@ -322,6 +340,49 @@ export default function App() {
       setSelectedPerson(person);
     }
     showToast(`«${person.name}» ma'lumotlari muvaffaqiyatli saqlandi!`);
+  };
+
+  const handleSavePersonWithRelation = (newPerson: Person, relatedPerson?: Person) => {
+    const isNew = !state.people[newPerson.id];
+    const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Oila a\'zosi';
+
+    setState((prev) => {
+      let updatedPeople = { ...prev.people, [newPerson.id]: newPerson };
+      if (relatedPerson) {
+        updatedPeople[relatedPerson.id] = relatedPerson;
+      }
+      updatedPeople = recalculateAllGenerations(updatedPeople);
+      const targetMe = prev.meId || (relatedPerson ? relatedPerson.id : newPerson.id);
+      const newRootId = findRootAncestorId(targetMe, updatedPeople);
+
+      return {
+        ...prev,
+        people: updatedPeople,
+        rootId: newRootId,
+        meId: targetMe,
+      };
+    });
+
+    syncPersonToSupabase(newPerson).catch(() => {});
+    if (relatedPerson) {
+      syncPersonToSupabase(relatedPerson).catch(() => {});
+    }
+
+    addHistoryRecord({
+      action: isNew ? 'person_add' : 'person_edit',
+      actorName,
+      personName: `${newPerson.name} ${newPerson.surname || ''}`.trim(),
+      personId: newPerson.id,
+      title: isNew ? "Yangi ota / ajdod qo'shildi" : "Shaxs ma'lumotlari yangilandi",
+      description: `${actorName} tomonidan «${newPerson.name}» shajaraga kiritildi.`,
+    });
+
+    if (selectedPerson) {
+      if (selectedPerson.id === newPerson.id) setSelectedPerson(newPerson);
+      else if (relatedPerson && selectedPerson.id === relatedPerson.id) setSelectedPerson(relatedPerson);
+    }
+
+    showToast(`«${newPerson.name}» muvaffaqiyatli shajaraga qo'shildi! 🌳`);
   };
 
   const handleDeletePerson = (personId: string) => {
@@ -374,30 +435,31 @@ export default function App() {
     showToast("Shaxs va uning shoxlari shajaradan o'chirildi.");
   };
 
+  const handleAddParent = (child: Person) => {
+    setChildForNewParent(child);
+    setParentForNewChild(null);
+    setPersonToEdit(null);
+    setIsEditModalOpen(true);
+  };
+
   const handleAddChild = (parent: Person) => {
-    if (state.currentUser?.personId && parent.id !== state.currentUser.personId) {
-      handleUnauthorizedEditAttempt("Xavfsizlik: Siz faqat o'z profilingizga farzand qo'sha olasiz!");
-      return;
-    }
     setParentForNewChild(parent);
+    setChildForNewParent(null);
     setPersonToEdit(null);
     setIsEditModalOpen(true);
   };
 
   const handleEditPerson = (person: Person) => {
-    const canEdit = Boolean(state.currentUser && state.currentUser.personId === person.id);
-    if (!canEdit) {
-      handleUnauthorizedEditAttempt();
-      return;
-    }
     setPersonToEdit(person);
     setParentForNewChild(null);
+    setChildForNewParent(null);
     setIsEditModalOpen(true);
   };
 
   const handleOpenAddRoot = () => {
     setPersonToEdit(null);
     setParentForNewChild(null);
+    setChildForNewParent(null);
     setIsEditModalOpen(true);
   };
 
@@ -496,6 +558,7 @@ export default function App() {
         onImport={handleImport}
         onReset={handleResetToDefault}
         onCenterMe={handleCenterMe}
+        onSelectPerson={(p) => setSelectedPerson(p)}
       />
 
       {/* Main Content Area */}
@@ -557,6 +620,7 @@ export default function App() {
               onSelectPerson={(p) => setSelectedPerson(p)}
               onEditPerson={handleEditPerson}
               onAddChild={handleAddChild}
+              onAddParent={handleAddParent}
               onSetTemporaryPerspective={handleSetTemporaryPerspective}
               onClearTemporaryPerspective={handleClearTemporaryPerspective}
               onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
@@ -609,20 +673,28 @@ export default function App() {
           onSelectPerson={(p) => setSelectedPerson(p)}
           onEditPerson={handleEditPerson}
           onAddChild={handleAddChild}
+          onAddParent={handleAddParent}
           onSetTemporaryPerspective={handleSetTemporaryPerspective}
           onDeletePerson={handleDeletePerson}
           onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
         />
       )}
 
-      {/* Edit / Add Child Modal */}
+      {/* Edit / Add Relative Modal */}
       <EditPersonModal
         isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setChildForNewParent(null);
+          setParentForNewChild(null);
+          setPersonToEdit(null);
+        }}
         personToEdit={personToEdit}
         parentForNewChild={parentForNewChild}
+        childForNewParent={childForNewParent}
         people={state.people}
         onSave={handleSavePerson}
+        onSaveWithRelation={handleSavePersonWithRelation}
       />
 
       {/* Kinship Calculator Modal */}
@@ -669,6 +741,7 @@ export default function App() {
         isOpen={isTelegramBotModalOpen}
         onClose={() => setIsTelegramBotModalOpen(false)}
         currentUser={state.currentUser}
+        people={state.people}
       />
 
       {/* Login & Register Modal */}
