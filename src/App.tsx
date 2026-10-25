@@ -24,6 +24,7 @@ import { PrintTreeModal } from './components/PrintTreeModal';
 import { HistoryModal } from './components/HistoryModal';
 import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
+import { GuestLandingView } from './components/GuestLandingView';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
 import { syncPersonToSupabase, fetchInviteFromSupabase } from './utils/supabaseDb';
@@ -280,6 +281,7 @@ export default function App() {
       }));
       showToast(`Xush kelibsiz, ${user.name}!`);
     }
+    setViewMode('tree');
     setIsLoginModalOpen(false);
   };
 
@@ -659,6 +661,16 @@ export default function App() {
             onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
           />
         )}
+
+        {/* Guest Landing / Information View */}
+        {viewMode === 'guest' && (
+          <GuestLandingView
+            onOpenLoginModal={() => setIsLoginModalOpen(true)}
+            onOpenTelegramBotModal={() => setIsTelegramBotModalOpen(true)}
+            onViewTree={() => setViewMode('tree')}
+            onOpenCalcModal={() => setIsCalcModalOpen(true)}
+          />
+        )}
       </main>
 
       {/* Person Detail Drawer */}
@@ -747,7 +759,12 @@ export default function App() {
       {/* Login & Register Modal */}
       <LoginModal
         isOpen={isLoginModalOpen && !window.Telegram?.WebApp?.initDataUnsafe?.user?.id}
-        onClose={() => setIsLoginModalOpen(false)}
+        onClose={() => {
+          setIsLoginModalOpen(false);
+          if (!state.currentUser || state.currentUser.isGuest) {
+            setViewMode('guest');
+          }
+        }}
         people={state.people}
         onLogin={handleLogin}
         inviteCode={inviteCodeFromUrl}

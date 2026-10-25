@@ -22,7 +22,8 @@ import {
   Printer,
   History,
   UserPlus,
-  Bot
+  Bot,
+  Info
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -147,6 +148,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Users className="w-3.5 h-3.5" />
               <span>Ro'yxat ({peopleList.length})</span>
+            </button>
+
+            <button
+              id="tab-guest-view"
+              onClick={() => onViewModeChange('guest')}
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all ${
+                viewMode === 'guest'
+                  ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Info className="w-3.5 h-3.5" />
+              <span>Mehmon sahifasi</span>
             </button>
           </div>
 
@@ -474,6 +488,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                     >
                       <Users className="w-4 h-4 text-sky-500" />
                       <span>Barcha a'zolar ro'yxati ({peopleList.length})</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        onViewModeChange('guest');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
+                        viewMode === 'guest'
+                          ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300 font-bold'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <Info className="w-4 h-4 text-teal-500" />
+                      <span>Mehmon sahifasi (Tanishuv va 7 Ajdod)</span>
                     </button>
                   </div>
                 </div>

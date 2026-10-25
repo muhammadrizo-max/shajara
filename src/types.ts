@@ -106,7 +106,7 @@ export interface FamilyTreeState {
   familyName?: string;
 }
 
-export type ViewMode = 'tree' | 'seven-ancestors' | 'list' | 'analytics';
+export type ViewMode = 'tree' | 'seven-ancestors' | 'list' | 'analytics' | 'guest';
 
 export interface RelativeRelationInfo {
   relationNameUz: string;
