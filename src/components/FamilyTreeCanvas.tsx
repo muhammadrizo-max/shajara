@@ -65,6 +65,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [showLifelines, setShowLifelines] = useState<boolean>(true);
 
   // Touch handling state refs for smooth multi-touch gestures (pinch-to-zoom & touch drag)
   const touchState = useRef<{
@@ -352,6 +353,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
             currentUser={currentUser}
             hasChildren={hasChildren}
             isExpanded={isExpanded}
+            showLifeline={showLifelines}
             onToggleExpand={() => toggleExpand(person.id)}
             onSelect={onSelectPerson}
             onEdit={onEditPerson}
@@ -512,6 +514,20 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
             </>
           )}
         </button>
+        {/* Toggle Lifelines ('Umr yo'li') */}
+        <button
+          id="btn-toggle-lifelines"
+          onClick={() => setShowLifelines(!showLifelines)}
+          className={`px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 ${
+            showLifelines
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+          title={showLifelines ? "Umr yo'li chiziqlarini yashirish" : "Umr yo'li chiziqlarini ko'rsatish"}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="hidden sm:inline">Umr yo'li</span>
+        </button>
       </div>
 
       {/* Canvas Info Badge on Desktop */}
@@ -537,39 +553,36 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               {displayRoots.map((rId) => renderTreeNode(rId))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center p-8 sm:p-12 max-w-lg mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl text-center space-y-4">
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-xl p-2.5">
-                <FamilyTreeLogo className="w-14 h-14" />
-              </div>
-              <div>
+            <div className="flex flex-col items-center justify-center p-8 sm:p-14 max-w-md mx-auto text-center space-y-5">
+              {/* Central Glowing + Button (Foydalanuvchi talabi) */}
+              <button
+                type="button"
+                onClick={onOpenAddRoot}
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-500 to-emerald-600 text-white shadow-2xl shadow-emerald-500/40 hover:scale-110 active:scale-95 transition-all flex flex-col items-center justify-center border-4 border-white/80 dark:border-slate-800 cursor-pointer group animate-bounce"
+                title="Yangi shajara yaratish va ilk odamni qo'shish"
+              >
+                <Plus className="w-10 h-10 sm:w-12 sm:h-12 group-hover:rotate-90 transition-transform duration-300" />
+                <span className="text-[10px] font-black uppercase tracking-wider mt-0.5">Boshlash</span>
+              </button>
+
+              <div className="space-y-1">
                 <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                  Shajarangiz Hozircha Bo'sh
+                  Yangi Shajara Yaratish
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                  Saytdagi barcha default ma'lumotlar tozalangan. O'z oilangiz va 7 ajdodingiz shajarasini yaratishni hoziroq boshlang!
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                  Markazdagi «+» tugmasini bosing va shajarangizga ilk shaxsni (o'zingiz yoki katta bobongizni) qo'shing!
                 </p>
               </div>
 
-              <div className="flex flex-col w-full gap-2.5 pt-2">
+              <div className="flex flex-col w-full gap-2 pt-2">
                 {!currentUser && onOpenLoginModal && (
                   <button
                     type="button"
                     onClick={onOpenLoginModal}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-95"
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Ro'yxatdan o'tish (Shajara yaratish)</span>
-                  </button>
-                )}
-
-                {onOpenAddRoot && (
-                  <button
-                    type="button"
-                    onClick={onOpenAddRoot}
-                    className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4 text-emerald-600" />
-                    <span>+ Birinchi Shaxsni Qo'shish</span>
+                    <UserPlus className="w-4 h-4 text-emerald-400" />
+                    <span>Ro'yxatdan o'tish / Kirish</span>
                   </button>
                 )}
 
@@ -577,10 +590,10 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   <button
                     type="button"
                     onClick={onOpenTelegramBotModal}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#24A1DE]/10 hover:bg-[#24A1DE]/20 text-[#24A1DE] dark:text-cyan-400 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#24A1DE]/10 hover:bg-[#24A1DE]/20 text-[#24A1DE] dark:text-cyan-400 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Bot className="w-4 h-4" />
-                    <span>Python Telegram Bot (@shajarachi_bot) orqali kiritish</span>
+                    <span>Telegram Bot (@shajarachi_bot)</span>
                   </button>
                 )}
               </div>

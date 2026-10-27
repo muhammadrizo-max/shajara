@@ -25,7 +25,7 @@ export function getRegisteredUsers(): RegisteredAccount[] {
 export function registerNewUser(data: {
   fullName: string;
   email: string;
-  phone: string;
+  phone?: string;
   birthDate?: string;
   password?: string;
   personId?: string | null;
@@ -36,17 +36,19 @@ export function registerNewUser(data: {
   const users = getRegisteredUsers();
 
   const cleanEmail = data.email.trim().toLowerCase();
-  const cleanPhone = data.phone.trim().replace(/\s+/g, '');
+  const cleanPhone = (data.phone || '').trim().replace(/\s+/g, '');
 
-  // Tekshirish: bunday email yoki telefon oldin ro'yxatdan o'tganmi?
+  // Tekshirish: bunday email oldin ro'yxatdan o'tganmi?
   const existingEmail = users.find(u => u.email.toLowerCase() === cleanEmail);
   if (existingEmail) {
     return { success: false, error: "Ushbu email manzili allaqachon ro'yxatdan o'tgan!" };
   }
 
-  const existingPhone = users.find(u => u.phone.replace(/\s+/g, '') === cleanPhone);
-  if (existingPhone) {
-    return { success: false, error: "Ushbu telefon raqami allaqachon ro'yxatdan o'tgan!" };
+  if (cleanPhone) {
+    const existingPhone = users.find(u => u.phone && u.phone.replace(/\s+/g, '') === cleanPhone);
+    if (existingPhone) {
+      return { success: false, error: "Ushbu telefon raqami allaqachon ro'yxatdan o'tgan!" };
+    }
   }
 
   const isFirstUser = users.length === 0;
@@ -56,8 +58,8 @@ export function registerNewUser(data: {
     fullName: data.fullName.trim(),
     birthDate: data.birthDate || '',
     email: cleanEmail,
-    phone: data.phone.trim(),
-    passwordHash: data.password || '123456', // Agar kiritilmasa oddiy standart parol
+    phone: data.phone?.trim() || '',
+    passwordHash: data.password || '123456',
     personId: data.personId || null,
     role: data.role || (isFirstUser ? 'owner' : 'editor'),
     createdAt: Date.now(),

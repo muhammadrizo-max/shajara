@@ -23,7 +23,8 @@ import {
   History,
   UserPlus,
   Bot,
-  Info
+  Info,
+  Camera
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -148,6 +149,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Users className="w-3.5 h-3.5" />
               <span>Ro'yxat ({peopleList.length})</span>
+            </button>
+
+            <button
+              id="tab-album-view"
+              onClick={() => onViewModeChange('album')}
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all ${
+                viewMode === 'album'
+                  ? 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5 text-rose-500" />
+              <span>Oila Albomi</span>
             </button>
 
             <button
@@ -492,6 +506,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                     <button
                       onClick={() => {
+                        onViewModeChange('album');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
+                        viewMode === 'album'
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 font-bold'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <Camera className="w-4 h-4 text-rose-500" />
+                      <span>Oila Albomi (Suratlar)</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
                         onViewModeChange('guest');
                         setIsMobileMenuOpen(false);
                       }}
@@ -512,6 +541,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
                     Xizmatlar & Integratsiya
                   </div>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenStatsModal();
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <BarChart3 className="w-4 h-4 text-emerald-600" />
+                      <span>Daraxt statistikasi (Oila Daraxti)</span>
+                    </div>
+                  </button>
 
                   <button
                     onClick={() => {

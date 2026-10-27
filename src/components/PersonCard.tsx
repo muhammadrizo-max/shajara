@@ -34,6 +34,7 @@ interface PersonCardProps {
   onUnauthorizedEditAttempt?: () => void;
   isSelected?: boolean;
   isHighlighted?: boolean;
+  showLifeline?: boolean;
 }
 
 export const PersonCard: React.FC<PersonCardProps> = ({
@@ -53,6 +54,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   onUnauthorizedEditAttempt,
   isSelected = false,
   isHighlighted = false,
+  showLifeline = true,
 }) => {
   const isMe = person.id === meId;
   const isTemporaryPerspective = activePerspectiveId === person.id;
@@ -229,6 +231,50 @@ export const PersonCard: React.FC<PersonCardProps> = ({
             </div>
           )}
         </div>
+
+        {/* Umr Yo'li (Lifeline Bar) */}
+        {showLifeline && (person.birthYear || person.birthDate) && (() => {
+          const birthYStr = person.birthYear || (person.birthDate ? person.birthDate.split('-')[0] : null);
+          const deathYStr = !person.isAlive && person.deathYear ? person.deathYear : null;
+          const bNum = birthYStr ? parseInt(birthYStr, 10) : null;
+          const dNum = deathYStr ? parseInt(deathYStr, 10) : null;
+          const curY = 2026;
+          let ageSpan: number | null = null;
+          if (bNum && !isNaN(bNum)) {
+            if (dNum && !isNaN(dNum) && dNum >= bNum) {
+              ageSpan = dNum - bNum;
+            } else if (person.isAlive !== false && curY >= bNum) {
+              ageSpan = curY - bNum;
+            }
+          }
+
+          return (
+            <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
+              <div className="flex items-center justify-between text-[10px] font-bold">
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Umr yo'li</span>
+                </span>
+                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                  {ageSpan !== null ? `${ageSpan} yil` : (birthYStr || '')}
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+                <div 
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    person.isAlive !== false
+                      ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-sky-400 w-full'
+                      : 'bg-gradient-to-r from-amber-500 via-slate-400 to-rose-400 w-[92%]'
+                  }`} 
+                />
+              </div>
+              <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono">
+                <span>{birthYStr || 'Tug\'ilgan'}</span>
+                <span>{person.isAlive !== false ? 'Hozir (Hayot)' : (deathYStr || 'Vafot')}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Action Toolbar on Card */}
         <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1">

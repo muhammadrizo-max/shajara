@@ -25,6 +25,7 @@ import { HistoryModal } from './components/HistoryModal';
 import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
 import { GuestLandingView } from './components/GuestLandingView';
+import { FamilyAlbumView } from './components/FamilyAlbumView';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
 import { syncPersonToSupabase, fetchInviteFromSupabase } from './utils/supabaseDb';
@@ -35,7 +36,8 @@ import {
   Lock,
   Compass,
   Sparkles,
-  Info
+  Info,
+  Bot
 } from 'lucide-react';
 
 export default function App() {
@@ -659,6 +661,25 @@ export default function App() {
             onSetTemporaryPerspective={handleSetTemporaryPerspective}
             onDeletePerson={handleDeletePerson}
             onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
+            onOpenStatsModal={() => setIsStatsModalOpen(true)}
+            onViewSevenAncestorsForPerson={(personId) => {
+              setState((prev) => ({ ...prev, activePerspectiveId: personId }));
+              setViewMode('seven-ancestors');
+              showToast(`«${state.people[personId]?.name || 'Shaxs'}»ning 7 ajdodi ko'rsatildi.`);
+            }}
+          />
+        )}
+
+        {/* Family Album View */}
+        {viewMode === 'album' && (
+          <FamilyAlbumView
+            people={state.people}
+            onSelectPerson={(p) => setSelectedPerson(p)}
+            onOpenEditModal={(p) => handleEditPerson(p)}
+            onViewInTree={(p) => {
+              setSelectedPerson(p);
+              setViewMode('tree');
+            }}
           />
         )}
 
@@ -771,6 +792,23 @@ export default function App() {
         targetPersonId={targetPersonFromUrl}
         onOpenTelegramModal={() => setIsTelegramBotModalOpen(true)}
       />
+
+      {/* Suzuvchi dumaloq Telegram Bot tugmasi (ekranning chap pastki burchagida - AI chat uslubida) */}
+      <div className="fixed bottom-20 left-3.5 sm:bottom-6 sm:left-6 z-40">
+        <button
+          id="btn-floating-telegram-bot"
+          onClick={() => setIsTelegramBotModalOpen(true)}
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#24A1DE] hover:bg-[#1a92ca] text-white shadow-xl hover:shadow-2xl flex items-center justify-center cursor-pointer transition-all hover:scale-110 active:scale-95 group focus:outline-none focus:ring-4 focus:ring-[#24A1DE]/40 relative"
+          title="Telegram Bot (@shajarachi_bot)"
+          aria-label="Telegram Bot"
+        >
+          <Bot className="w-6 h-6 sm:w-7 sm:h-7 transition-transform group-hover:rotate-12" />
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 ring-2 ring-white dark:ring-slate-900"></span>
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -89,18 +89,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setError("Iltimos, to'g'ri email manzilini kiriting");
       return;
     }
-    if (!regPhone.trim() || regPhone.trim().length < 7) {
-      setError("Iltimos, to'liq telefon raqamingizni kiriting");
+    if (!regPassword.trim() || regPassword.trim().length < 4) {
+      setError("Iltimos, kamida 4 belgidan iborat parol kiriting");
       return;
     }
 
     const res = registerNewUser({
       fullName: regFullName.trim(),
       email: regEmail.trim(),
-      phone: regPhone.trim(),
-      birthDate: regBirthDate.trim() || undefined,
-      password: regPassword.trim() || '123456',
-      personId: regPersonId || undefined,
+      password: regPassword.trim(),
       role: isTreeEmpty ? 'owner' : 'editor',
     });
 
@@ -349,12 +346,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
           {/* TAB 1: RO'YXATDAN O'TISH (REGISTER) */}
           {activeTab === 'register' && (
-            <form onSubmit={handleRegister} className="space-y-3">
+            <form onSubmit={handleRegister} className="space-y-3.5">
               {/* To'liq Ism-familiya */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                   <User className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Ism va Familiyangiz (to'liq)</span>
+                  <span>Ism va Familiyangiz</span>
                   <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -367,104 +364,35 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 />
               </div>
 
-              {/* Telefon & Email (Majburiy) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Telefon raqamingiz</span>
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="+998 90 123 45 67"
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Email manzilingiz</span>
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="namuna@mail.com"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Jinsi & Tug'ilgan sana (Ixtiyoriy) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Jinsi (Ixtiyoriy)</span>
-                  </label>
-                  <select
-                    value={regGender}
-                    onChange={(e) => setRegGender(e.target.value as Gender)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium"
-                  >
-                    <option value="male">Erkak (O'g'il / Ota)</option>
-                    <option value="female">Ayol (Qiz / Ona)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Tug'ilgan sana (Ixtiyoriy)</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={regBirthDate}
-                    onChange={(e) => setRegBirthDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Shajaradagi o'rni */}
-              {!isTreeEmpty && (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Mavjud shajaradagi o'rningiz (Ixtiyoriy)</span>
-                  </label>
-                  <select
-                    value={regPersonId}
-                    onChange={(e) => setRegPersonId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value="">Yangi asoschi / a'zo sifatida</option>
-                    {peopleList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.surname || ''} ({p.generation}-pusht)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Parol (Ixtiyoriy) */}
+              {/* Email */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Parol (Ixtiyoriy, kiritilmasa avtomatik yaratiladi)</span>
+                  <Mail className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Email manzilingiz</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="namuna@mail.com"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Parol */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Parol</span>
+                  <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Masalan: 123456 (yoki bo'sh qoldiring)"
+                    required
+                    placeholder="Kamida 4 ta belgi"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -482,7 +410,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Ro'yxatdan o'tish va Shajarani boshlash</span>
@@ -497,13 +425,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                   <Mail className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Email yoki Telefon raqamingiz</span>
+                  <span>Email manzilingiz</span>
                   <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  placeholder="Email yoki +998..."
+                  placeholder="namuna@mail.com"
                   value={loginIdentifier}
                   onChange={(e) => setLoginIdentifier(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -538,7 +466,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Tizimga kirish</span>
