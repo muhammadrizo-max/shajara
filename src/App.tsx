@@ -32,6 +32,10 @@ import { ThemeMode, getInitialTheme, applyTheme } from './utils/theme';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
 import { syncPersonToSupabase, fetchInviteFromSupabase } from './utils/supabaseDb';
+import { LeftSidebar } from './components/LeftSidebar';
+import { RightSidebar } from './components/RightSidebar';
+import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
+import { clearSupabaseSession } from './utils/supabaseClient';
 import { 
   Search, 
   CheckCircle2, 
@@ -40,7 +44,8 @@ import {
   Compass,
   Sparkles,
   Info,
-  Bot
+  Bot,
+  X
 } from 'lucide-react';
 
 export default function App() {
@@ -75,6 +80,11 @@ export default function App() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [isTelegramBotModalOpen, setIsTelegramBotModalOpen] = useState<boolean>(false);
 
+  // Sidebars and Logout Dialog states
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
+
   // Relative addition modal state (+ Ota, Ona, Turmush o'rtoq, O'g'il, Qiz)
   const [isAddRelativeModalOpen, setIsAddRelativeModalOpen] = useState<boolean>(false);
   const [targetPersonForRelativeModal, setTargetPersonForRelativeModal] = useState<Person | null>(null);
@@ -106,6 +116,18 @@ export default function App() {
   const handleOpenPolicy = (type: PolicyType) => {
     setCurrentPolicyType(type);
     setIsPolicyModalOpen(true);
+  };
+
+  const handleConfirmLogout = () => {
+    setCurrentSessionUser(null);
+    clearSupabaseSession();
+    setState((prev) => ({
+      ...prev,
+      currentUser: null,
+      activePerspectiveId: undefined,
+    }));
+    setViewMode('guest');
+    showToast("Hisobdan muvaffaqiyatli chiqildi. Mehmon sahifasiga qaytdingiz.");
   };
 
   // Telegram WebApp — avval foydalanuvchi ma'lumotini kutamiz, keyin ishga tushiramiz
@@ -612,76 +634,65 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Navbar */}
-      <Navbar
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        people={state.people}
-        meId={state.meId}
-        currentUser={state.currentUser}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        onOpenLoginModal={() => setIsLoginModalOpen(true)}
-        onOpenAddModal={handleOpenAddRoot}
-        onOpenCalcModal={() => setIsCalcModalOpen(true)}
-        onOpenStatsModal={() => setIsStatsModalOpen(true)}
-        onOpenPrintModal={() => setIsPrintModalOpen(true)}
-        onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
-        onOpenInviteModal={() => setIsInviteModalOpen(true)}
-        onOpenTelegramBotModal={() => setIsTelegramBotModalOpen(true)}
-        onExport={handleExport}
-        onImport={handleImport}
-        onReset={handleResetToDefault}
-        onCenterMe={handleCenterMe}
-        onSelectPerson={(p) => setSelectedPerson(p)}
-      />
+      {/* Top Navbar — Only rendered in internal app view modes, NOT on guest landing page */}
+      {viewMode !== 'guest' && (
+        <Navbar
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          people={state.people}
+          meId={state.meId}
+          currentUser={state.currentUser}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          onToggleLeftSidebar={() => setIsLeftSidebarOpen((prev) => !prev)}
+          onToggleRightSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
+          onOpenAddModal={handleOpenAddRoot}
+          onOpenCalcModal={() => setIsCalcModalOpen(true)}
+          onOpenPrintModal={() => setIsPrintModalOpen(true)}
+          onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
+          onExport={handleExport}
+          onImport={handleImport}
+          onRequestLogout={() => setIsLogoutConfirmOpen(true)}
+          onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        />
+      )}
 
       {/* Main Content Area */}
       <main className={`flex-1 w-full min-h-0 ${
         viewMode === 'tree' 
-          ? 'overflow-hidden flex flex-col p-1 sm:p-2.5 pb-16 md:pb-2 max-w-full' 
-          : 'overflow-y-auto max-w-7xl mx-auto p-2 sm:p-6 pb-24 md:pb-6'
+          ? 'overflow-hidden flex flex-col relative max-w-full p-0' 
+          : viewMode === 'guest'
+            ? 'overflow-y-auto w-full p-0 m-0'
+            : 'overflow-y-auto max-w-7xl mx-auto p-2 sm:p-6 pb-24 md:pb-6'
       }`}>
         {/* Tree View */}
         {viewMode === 'tree' && (
-          <div className="space-y-1.5 sm:space-y-2 flex-1 w-full h-full min-h-0 flex flex-col overflow-hidden">
-            {/* Quick Tree Search & Info Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-white dark:bg-slate-900 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex-shrink-0">
-              <div className="relative w-full sm:w-72 hidden md:block">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <div className="relative w-full h-full min-h-0 flex-1 overflow-hidden">
+            {/* Floating Search Bar on Canvas — moves when left sidebar opens */}
+            <div 
+              className={`absolute top-3.5 z-20 transition-all duration-300 pointer-events-auto ${
+                isLeftSidebarOpen ? 'left-[21rem] sm:left-[23rem]' : 'left-3 sm:left-4'
+              } w-60 sm:w-72`}
+            >
+              <div className="relative flex items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
-                  id="search-tree-input"
+                  id="search-tree-floating-input"
                   type="text"
-                  placeholder="Shajaradan qidirish (ism, unvon)..."
+                  placeholder="Shajaradan qidirish..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-8 py-2 rounded-2xl bg-transparent text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
-              </div>
-
-              {/* Legend Badges */}
-              <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 flex-wrap justify-center w-full sm:w-auto">
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-500 inline-block" />
-                  <strong>Siz (Men)</strong>
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-amber-500 inline-block" />
-                  <strong>7 Ajdod</strong>
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-sky-500 inline-block" />
-                  <strong>O'g'il</strong>
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rose-500 inline-block" />
-                  <strong>Qiz</strong>
-                </span>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full"
+                    title="Tozalash"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -890,6 +901,50 @@ export default function App() {
         isOpen={isPolicyModalOpen}
         onClose={() => setIsPolicyModalOpen(false)}
         initialPolicy={currentPolicyType}
+      />
+
+      {/* Chap Sidebar (Shajaraga oid vositalar va boshqaruv) */}
+      <LeftSidebar
+        isOpen={isLeftSidebarOpen}
+        onClose={() => setIsLeftSidebarOpen(false)}
+        people={state.people}
+        meId={state.meId}
+        rootId={state.rootId}
+        viewMode={viewMode}
+        onViewModeChange={(m) => {
+          setViewMode(m);
+          setIsLeftSidebarOpen(false);
+        }}
+        onOpenAddModal={handleOpenAddRoot}
+        onOpenPrintModal={() => setIsPrintModalOpen(true)}
+        onOpenCalcModal={() => setIsCalcModalOpen(true)}
+        onExport={handleExport}
+        onImport={handleImport}
+        onReset={handleResetToDefault}
+      />
+
+      {/* O'ng Sidebar (Foydalanuvchi profili, taklif, statistika, tarix, chiqish) */}
+      <RightSidebar
+        isOpen={isRightSidebarOpen}
+        onClose={() => setIsRightSidebarOpen(false)}
+        currentUser={state.currentUser}
+        me={state.people[state.meId]}
+        peopleCount={Object.keys(state.people).length}
+        onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        onOpenInviteModal={() => setIsInviteModalOpen(true)}
+        onOpenTelegramBotModal={() => setIsTelegramBotModalOpen(true)}
+        onOpenStatsModal={() => setIsStatsModalOpen(true)}
+        onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
+        onOpenPolicy={handleOpenPolicy}
+        onRequestLogout={() => setIsLogoutConfirmOpen(true)}
+      />
+
+      {/* Real Hisobdan Chiqishni Tasdiqlash Modali */}
+      <ConfirmLogoutModal
+        isOpen={isLogoutConfirmOpen}
+        onClose={() => setIsLogoutConfirmOpen(false)}
+        onConfirm={handleConfirmLogout}
+        userName={state.currentUser?.fullName || state.currentUser?.name}
       />
 
       {/* Suzuvchi dumaloq Telegram Bot tugmasi (ekranning chap pastki burchagida - AI chat uslubida) */}

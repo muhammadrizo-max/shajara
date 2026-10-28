@@ -1,6 +1,0 @@
-{
-  "name": "7 Ajdod Shajarasi",
-  "description": "7 ajdod va avlodlar shajarasi, interaktiv daraxt, fotosuratlar yuklash, o'g'il/farzand qo'shish va qarindoshlik aloqalarini aniqlash tizimi.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

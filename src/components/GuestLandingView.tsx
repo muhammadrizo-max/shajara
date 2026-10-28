@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   ArrowRight,
@@ -16,7 +16,9 @@ import {
   ExternalLink,
   MessageCircle,
   HelpCircle,
-  Play
+  Play,
+  Compass,
+  Globe
 } from 'lucide-react';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
 import { Person } from '../types';
@@ -31,6 +33,8 @@ interface GuestLandingViewProps {
   onOpenPolicy?: (type: 'privacy' | 'terms' | 'offer' | 'consent') => void;
 }
 
+type SectionKey = 'hero' | 'imkoniyatlar' | 'afzalliklar' | 'boglanish';
+
 export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
   people = {},
   onOpenLoginModal,
@@ -39,11 +43,10 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
   onOpenCalcModal,
   onOpenPolicy,
 }) => {
-  const [selectedDemoIndex, setSelectedDemoIndex] = useState<number>(3); // "Siz"
+  const [activeSection, setActiveSection] = useState<SectionKey>('hero');
   const [contactEmail, setContactEmail] = useState('');
   const [contactMessage, setContactMessage] = useState('');
   const [isSent, setIsSent] = useState(false);
-  const [activeLang, setActiveLang] = useState<'UZ' | 'ЎЗ' | 'РУ' | 'EN'>('UZ');
 
   // Real statistics calculation based on people in tree
   const peopleList = Object.values(people) as Person[];
@@ -53,10 +56,38 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
     ? Math.max(...peopleList.map((p) => p.generation || 1), 1)
     : 0;
 
-  const scrollToSection = (id: string) => {
+  const scrollToSection = (id: string, sectionKey: SectionKey) => {
+    setActiveSection(sectionKey);
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
   };
+
+  // Scroll detection to update active tab indicator automatically
+  useEffect(() => {
+    const handleScroll = () => {
+      const hero = document.getElementById('hero-section');
+      const imkoniyatlar = document.getElementById('imkoniyatlar-section');
+      const afzalliklar = document.getElementById('afzalliklar-section');
+      const boglanish = document.getElementById('boglanish-section');
+
+      const scrollPos = window.scrollY + 200;
+
+      if (boglanish && scrollPos >= boglanish.offsetTop) {
+        setActiveSection('boglanish');
+      } else if (afzalliklar && scrollPos >= afzalliklar.offsetTop) {
+        setActiveSection('afzalliklar');
+      } else if (imkoniyatlar && scrollPos >= imkoniyatlar.offsetTop) {
+        setActiveSection('imkoniyatlar');
+      } else {
+        setActiveSection('hero');
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,10 +102,10 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
 
     // 1. Local backup in localStorage
     try {
-      const existingRaw = localStorage.getItem('myshajara_contact_messages') || '[]';
+      const existingRaw = localStorage.getItem('shajarachi_contact_messages') || '[]';
       const existing = JSON.parse(existingRaw);
       existing.unshift(payload);
-      localStorage.setItem('myshajara_contact_messages', JSON.stringify(existing.slice(0, 50)));
+      localStorage.setItem('shajarachi_contact_messages', JSON.stringify(existing.slice(0, 50)));
     } catch (err) {
       console.warn("Could not save to localStorage:", err);
     }
@@ -84,7 +115,6 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
       try {
         await supabase.from('contact_messages').insert([payload]);
       } catch (err) {
-        // Safe fallback if table not yet provisioned
         console.info("Supabase feedback saved locally:", payload);
       }
     }
@@ -107,77 +137,80 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
     { level: 1, title: 'O\'zingiz (Avlod)', badge: 'Markaziy shaxs', role: 'Meros davomchisi' },
   ];
 
-  const DEMO_CHAIN = [
-    { id: 'd1', title: 'Katta bobo', name: 'Abdurahmon bobo', years: '1910 — 1982', relation: '4-pusht ajdod', desc: "Usta duradgor. Xonadonning mustahkam asoschilaridan." },
-    { id: 'd2', title: 'Bobo', name: 'Bahodir bobo', years: '1942 — 2015', relation: '3-pusht ajdod', desc: "Maktab direktori. 4 farzand va 12 nabiraning sevimli bobosi." },
-    { id: 'd3', title: 'Ota', name: 'Rustam ota', years: '1970 yilda tug\'ilgan', relation: '2-pusht ajdod', desc: "Muhandis, oila tayanchi. Shajara an'analarini saqlab kelmoqda." },
-    { id: 'd4', title: 'Siz (Avlod)', name: 'Sizning ismingiz', years: 'Hozirgi avlod', relation: '1-pusht', desc: "O'z 7 ajdodini aniqlab, oila daraxtini jamlayotgan shaxs." },
+  const NAV_ITEMS: { key: SectionKey; label: string; targetId: string }[] = [
+    { key: 'hero', label: 'Asosiy', targetId: 'hero-section' },
+    { key: 'imkoniyatlar', label: 'Imkoniyatlar', targetId: 'imkoniyatlar-section' },
+    { key: 'afzalliklar', label: 'Afzalliklar', targetId: 'afzalliklar-section' },
+    { key: 'boglanish', label: 'Bog\'lanish', targetId: 'boglanish-section' },
   ];
 
   return (
     <div className="w-full min-h-screen bg-[#07131D] text-slate-100 selection:bg-emerald-500 selection:text-white pb-20">
       
-      {/* 1. TOP NAVBAR (Matching 1-rasm) */}
+      {/* 1. TOP NAVBAR (Shajarachi — Mehmon Sahifasi Navbari) */}
       <header className="sticky top-0 z-40 bg-[#07131D]/90 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-8 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => scrollToSection('hero-section')}>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-1 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <FamilyTreeLogo className="w-7 h-7 text-white" />
+          
+          {/* Logo & Brand Name */}
+          <div 
+            className="flex items-center gap-2.5 cursor-pointer group" 
+            onClick={() => scrollToSection('hero-section', 'hero')}
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-1 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform shrink-0">
+              <FamilyTreeLogo className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-lg sm:text-xl font-black text-white tracking-tight">
-                My<span className="text-emerald-400">Shajara</span>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg sm:text-xl font-black text-white tracking-tight">
+                  Shajara<span className="text-emerald-400">chi</span>
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  uz
+                </span>
+              </div>
+              <span className="text-[9px] text-slate-400 hidden sm:block">
+                O'tmish ildizlari bilan kelajakni bog'lovchi ko'prik.
               </span>
             </div>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-300">
-            <button 
-              onClick={() => scrollToSection('hero-section')} 
-              className="text-emerald-400 border-b-2 border-emerald-400 pb-0.5"
-            >
-              Asosiy
-            </button>
-            <button 
-              onClick={() => scrollToSection('imkoniyatlar-section')} 
-              className="hover:text-white transition"
-            >
-              Imkoniyatlar
-            </button>
-            <button 
-              onClick={() => scrollToSection('afzalliklar-section')} 
-              className="hover:text-white transition"
-            >
-              Afzalliklar
-            </button>
-            <button 
-              onClick={() => scrollToSection('boglanish-section')} 
-              className="hover:text-white transition"
-            >
-              Bog'lanish
-            </button>
+          {/* Navigation Links with dynamic moving green line indicator */}
+          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold">
+            {NAV_ITEMS.map((item) => {
+              const isActive = activeSection === item.key;
+              return (
+                <button 
+                  key={item.key}
+                  onClick={() => scrollToSection(item.targetId, item.key)} 
+                  className={`relative py-1 transition-colors cursor-pointer ${
+                    isActive 
+                      ? 'text-emerald-400 font-bold' 
+                      : 'text-slate-300 hover:text-white font-medium'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {/* Dynamic green underline */}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400 rounded-full animate-in fade-in duration-200" />
+                  )}
+                </button>
+              );
+            })}
           </nav>
 
-          {/* Right Language Pills & Auth */}
-          <div className="flex items-center gap-3">
-            {/* Language Pills (1-rasm) */}
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] font-bold text-slate-400">
-              {(['UZ', 'ЎЗ', 'РУ', 'EN'] as const).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setActiveLang(lang)}
-                  className={`hover:text-white transition px-1 ${activeLang === lang ? 'text-white font-extrabold' : ''}`}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
+          {/* Right Action Buttons (Language selector completely removed per user request) */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <button
+              onClick={onViewTree}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/80 transition flex items-center gap-1.5"
+            >
+              <FamilyTreeLogo className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Daraxtni ko'rish</span>
+            </button>
 
             <button
               onClick={onOpenLoginModal}
-              className="hidden sm:flex px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-900/40 transition active:scale-95"
+              className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-emerald-500/25 transition active:scale-95 cursor-pointer"
             >
               Kirish / Boshlash
             </button>
@@ -187,13 +220,13 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-8 space-y-16 sm:space-y-24 pt-8 sm:pt-14">
         
-        {/* 2. HERO SECTION (Matching 1-rasm) */}
-        <section id="hero-section" className="relative grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        {/* 2. HERO SECTION */}
+        <section id="hero-section" className="relative grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-2">
           {/* Left Text */}
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Oila tarixingizni saqlashning zamonaviy usuli</span>
+              <span>O'tmish ildizlari bilan kelajakni bog'lovchi ko'prik</span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.12]">
@@ -202,7 +235,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
             </h1>
 
             <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-xl font-normal">
-              Qarindoshlarni bog'lang, oilaviy daraxt yarating, suratlarni saqlang va shajarangizni yuqori sifatli PNG hamda PDF ko'rinishida eksport qiling.
+              Qarindoshlarni bog'lang, 7 ajdod shajarasini tuzing, oilaviy suratlarni saqlang va shajarangizni yuqori sifatli PDF hamda devoriy A4 shaklida eksport qiling.
             </p>
 
             {/* Buttons */}
@@ -212,10 +245,11 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 className="px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition active:scale-95 flex items-center gap-2 cursor-pointer"
               >
                 <span>Shajara yaratishni boshlash</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
 
               <button
-                onClick={() => scrollToSection('imkoniyatlar-section')}
+                onClick={() => scrollToSection('imkoniyatlar-section', 'imkoniyatlar')}
                 className="px-5 py-3.5 rounded-2xl bg-slate-900/80 hover:bg-slate-800 text-white font-bold text-sm border border-slate-700/80 transition flex items-center gap-2 cursor-pointer"
               >
                 <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
@@ -223,7 +257,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               </button>
             </div>
 
-            {/* Social proof (1-rasm: +1K 1000+ foydalanuvchi) */}
+            {/* Social proof */}
             <div className="flex items-center gap-3 pt-3">
               <div className="flex -space-x-2">
                 <div className="w-8 h-8 rounded-full bg-emerald-600 border-2 border-[#07131D] flex items-center justify-center text-[10px] font-bold text-white">
@@ -240,13 +274,13 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 </div>
               </div>
               <div className="text-xs">
-                <span className="font-extrabold text-white block">1000+ foydalanuvchi</span>
-                <span className="text-slate-400 text-[11px]">biz bilan birga bo'ladi</span>
+                <span className="font-extrabold text-white block">1000+ oila a'zosi</span>
+                <span className="text-slate-400 text-[11px]">shajarachi.uz platformasida o'z shajarasini tuzmoqda</span>
               </div>
             </div>
           </div>
 
-          {/* Right Visual Tree Art (1-rasm) */}
+          {/* Right Visual Tree Art */}
           <div className="lg:col-span-5 relative flex justify-center">
             <div className="relative w-full max-w-md rounded-3xl bg-gradient-to-b from-slate-900/90 to-emerald-950/60 p-6 border border-emerald-500/20 shadow-2xl backdrop-blur-sm overflow-hidden">
               <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" />
@@ -308,7 +342,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
 
                 {/* Generation 3: Children */}
                 <div className="flex items-center justify-center gap-3 mt-1">
-                  {['Otabek', 'Alisher', 'Sevinch'].map((child, i) => (
+                  {['Otabek', 'Alisher', 'Sevinch'].map((child) => (
                     <div key={child} className="flex flex-col items-center">
                       <div className="w-8 h-8 rounded-full border border-emerald-400/80 bg-slate-800 flex items-center justify-center text-[10px] font-bold text-emerald-200">
                         {child.charAt(0)}
@@ -319,7 +353,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 </div>
               </div>
 
-              {/* Quote pill at bottom of tree graphic (1-rasm) */}
+              {/* Quote pill at bottom of tree graphic */}
               <div className="mt-4 p-3 rounded-2xl bg-black/60 border border-emerald-500/30 text-[11px] text-slate-200 leading-snug flex items-center gap-2">
                 <span className="text-emerald-400 text-lg font-serif">“</span>
                 <span>Biz kim ekanimizni bilsak, kelajagimiz yanada mustahkam bo'ladi.</span>
@@ -328,18 +362,18 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
           </div>
         </section>
 
-        {/* 3. THREE FEATURE CARDS (Matching 2-rasm) */}
-        <section id="imkoniyatlar-section" className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* 3. THREE FEATURE CARDS */}
+        <section id="imkoniyatlar-section" className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
           {/* Card 1: Oila daraxti */}
           <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/50 transition-all space-y-3 group">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center group-hover:scale-105 transition">
               <FamilyTreeLogo className="w-7 h-7" />
             </div>
             <h3 className="text-base font-extrabold text-white">
-              Oila daraxti
+              Oila daraxti va 7 Ajdod
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Avlodlarni oson bog'lash va vizual ko'rish. Har bir ajdod va farzandni xaritada erkin boshqarish.
+              Avlodlarni oson bog'lash va interaktiv vizual ko'rish. Har bir ajdod va farzandni xaritada erkin tahrirlash.
             </p>
           </div>
 
@@ -349,10 +383,10 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               <ImageIcon className="w-7 h-7" />
             </div>
             <h3 className="text-base font-extrabold text-white">
-              Oilaviy suratlar
+              Oilaviy suratlar & Albom
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Har bir qarindosh uchun foto va ma'lumotlar. Oila albomi orqali barcha fotosuratlarni jamlash.
+              Har bir qarindosh uchun fotosuratlar va tarjimai hollar. Oila albomi orqali xotiralarni bir joyda asrash.
             </p>
           </div>
 
@@ -362,22 +396,22 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               <FileText className="w-7 h-7" />
             </div>
             <h3 className="text-base font-extrabold text-white">
-              PNG va PDF eksport
+              A4 Chop etish va Eksport
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Yuqori sifatli eksport va chop etish imkoniyati. A4 Landscape formatida devoriy shajara tayyorlash.
+              Yuqori sifatli eksport va chop etish imkoniyati. A4 Landscape formatida devoriy shajara plakatini tayyorlash.
             </p>
           </div>
         </section>
 
-        {/* 4. STATS NUMBERS BAR (Matching 2-rasm - Haqiqiy va dinamik ko'rsatkichlar) */}
+        {/* 4. STATS NUMBERS BAR */}
         <section className="p-6 sm:p-8 rounded-3xl bg-slate-900/40 border border-slate-800/80 grid grid-cols-2 lg:grid-cols-4 gap-6 text-center">
           <div>
             <div className="text-2xl sm:text-3xl font-black text-emerald-400 mb-1">
               {realPeopleCount > 0 ? `${realPeopleCount} nafar` : "1000+"}
             </div>
             <div className="text-xs text-slate-400 font-medium">
-              {realPeopleCount > 0 ? "Shajaradagi a'zolar" : "Kutilayotgan foydalanuvchilar"}
+              {realPeopleCount > 0 ? "Shajaradagi a'zolar" : "Faol oilalar"}
             </div>
           </div>
 
@@ -395,7 +429,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               {realPhotoCount > 0 ? `${realPhotoCount} ta` : "20K+"}
             </div>
             <div className="text-xs text-slate-400 font-medium">
-              {realPhotoCount > 0 ? "Yuklangan oilaviy suratlar" : "Saqlanadigan suratlar"}
+              {realPhotoCount > 0 ? "Yuklangan oilaviy suratlar" : "Saqlangan xotiralar"}
             </div>
           </div>
 
@@ -404,17 +438,17 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               100%
             </div>
             <div className="text-xs text-slate-400 font-medium">
-              Ma'lumotlar xavfsizligi
+              Xavfsiz va shifrlangan
             </div>
           </div>
         </section>
 
-        {/* 5. SHOWCASE: BARCHASI BITTA PLATFORMADA (Matching 2-rasm) */}
-        <section id="afzalliklar-section" className="p-6 sm:p-12 rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900 to-[#0c1f2e] border border-slate-800 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        {/* 5. SHOWCASE: BARCHASI BITTA PLATFORMADA */}
+        <section id="afzalliklar-section" className="p-6 sm:p-12 rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900 to-[#0c1f2e] border border-slate-800 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-4">
           <div className="lg:col-span-7 space-y-5">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Tez kunda</span>
+              <span>shajarachi.uz</span>
             </span>
 
             <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
@@ -422,7 +456,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
             </h2>
 
             <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-              Kompyuter va mobil qurilmalarda ishlaydi. Qayerda bo'lsangiz ham, shajarangiz doimo siz bilan.
+              Kompyuter, planshet va mobil qurilmalarda tezkor ishlaydi. Qayerda bo'lsangiz ham, shajarangiz doimo siz bilan.
             </p>
 
             <div className="space-y-3 pt-2">
@@ -431,7 +465,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
                 <span className="text-xs sm:text-sm text-slate-200 font-medium">
-                  Oson boshqaruv va qulay interfeys
+                  Oson boshqaruv va zamonaviy 2 ta qulay sidebar tizimi
                 </span>
               </div>
 
@@ -440,7 +474,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
                 <span className="text-xs sm:text-sm text-slate-200 font-medium">
-                  Shajara, suratlar va eslatmalar bir joyda
+                  Shajara, suratlar, qarindoshlik kalkulyatori bir joyda
                 </span>
               </div>
 
@@ -449,7 +483,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
                 <span className="text-xs sm:text-sm text-slate-200 font-medium">
-                  Telegram Bot (@shajarachi_bot) bilan to'g'ridan-to'g'ri bog'liqlik
+                  Telegram Bot (@shajarachi_bot) bilan to'liq integratsiya
                 </span>
               </div>
             </div>
@@ -457,30 +491,33 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
             <div className="pt-4 flex flex-wrap items-center gap-3">
               <button
                 onClick={onOpenTelegramBotModal}
-                className="px-5 py-2.5 rounded-xl bg-[#24A1DE] hover:bg-[#1E8BC0] text-white text-xs font-bold flex items-center gap-2 shadow-md transition"
+                className="px-5 py-2.5 rounded-xl bg-[#24A1DE] hover:bg-[#1E8BC0] text-white text-xs font-bold flex items-center gap-2 shadow-md transition cursor-pointer"
               >
                 <Bot className="w-4 h-4" />
-                <span>Telegram Botni ulash</span>
+                <span>Telegram Bot (@shajarachi_bot)</span>
               </button>
 
               <button
                 onClick={onViewTree}
-                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition"
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition cursor-pointer"
               >
-                <span>Daraxtni ko'rish</span>
+                <span>Daraxtni ochish</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          {/* Smartphone Mockup Visual (2-rasm) */}
+          {/* Smartphone Mockup Visual */}
           <div className="lg:col-span-5 flex justify-center">
             <div className="relative w-full max-w-xs p-4 rounded-3xl bg-slate-950 border-2 border-slate-700 shadow-2xl">
               <div className="w-24 h-4 bg-slate-800 rounded-full mx-auto mb-3" />
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 border-b border-slate-800 pb-2">
-                  <span>MyShajara App</span>
-                  <span className="text-emerald-400">Online</span>
+                  <span>Shajarachi App</span>
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Online
+                  </span>
                 </div>
                 <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-center">
                   <div className="w-12 h-12 mx-auto rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center font-bold text-lg">
@@ -504,7 +541,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
           </div>
         </section>
 
-        {/* 6. OUR 7 AJDOD TRADITION SECTION (Bizning shajara tuzilmamiz) */}
+        {/* 6. OUR 7 AJDOD TRADITION SECTION */}
         <section className="space-y-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
@@ -531,7 +568,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
           </div>
         </section>
 
-        {/* 7. BIZ BILAN BOG'LANING (Matching 3-rasm) */}
+        {/* 7. BIZ BILAN BOG'LANING */}
         <section id="boglanish-section" className="p-6 sm:p-10 rounded-3xl bg-gradient-to-br from-slate-900/90 to-[#072421] border border-emerald-500/20 shadow-xl">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Left Description */}
@@ -542,9 +579,13 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 Savol yoki taklifingiz bormi? Bizga yozing — tez orada javob beramiz.
               </p>
+              <div className="pt-2 text-xs text-slate-400 space-y-1">
+                <div>Domen: <span className="text-emerald-400 font-bold">shajarachi.uz</span></div>
+                <div>Telegram Bot: <span className="text-[#24A1DE] font-bold">@shajarachi_bot</span></div>
+              </div>
             </div>
 
-            {/* Right Form (3-rasm) */}
+            {/* Right Form */}
             <div className="lg:col-span-7">
               {isSent ? (
                 <div className="p-6 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 text-center space-y-2 animate-in fade-in">
@@ -584,7 +625,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
           </div>
         </section>
 
-        {/* 8. FOOTER (Matching 3-rasm) */}
+        {/* 8. FOOTER */}
         <footer className="pt-10 border-t border-slate-800/80 space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {/* Col 1: Brand & Tagline */}
@@ -594,11 +635,11 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                   <FamilyTreeLogo className="w-6 h-6 text-slate-950" />
                 </div>
                 <span className="text-lg font-black text-white">
-                  My<span className="text-emerald-400">Shajara</span>
+                  Shajara<span className="text-emerald-400">chi</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Oila tarixingiz — kelajak avlodlar uchun eng qimmatli meros.
+                O'tmish ildizlari bilan kelajakni bog'lovchi ko'prik.
               </p>
             </div>
 
@@ -608,9 +649,10 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 Bo'limlar
               </h5>
               <ul className="space-y-1.5 text-xs text-slate-400">
-                <li><button onClick={() => scrollToSection('hero-section')} className="hover:text-white">Asosiy</button></li>
-                <li><button onClick={() => scrollToSection('imkoniyatlar-section')} className="hover:text-white">Imkoniyatlar</button></li>
-                <li><button onClick={() => scrollToSection('afzalliklar-section')} className="hover:text-white">Afzalliklar</button></li>
+                <li><button onClick={() => scrollToSection('hero-section', 'hero')} className="hover:text-white cursor-pointer">Asosiy</button></li>
+                <li><button onClick={() => scrollToSection('imkoniyatlar-section', 'imkoniyatlar')} className="hover:text-white cursor-pointer">Imkoniyatlar</button></li>
+                <li><button onClick={() => scrollToSection('afzalliklar-section', 'afzalliklar')} className="hover:text-white cursor-pointer">Afzalliklar</button></li>
+                <li><button onClick={() => scrollToSection('boglanish-section', 'boglanish')} className="hover:text-white cursor-pointer">Bog'lanish</button></li>
               </ul>
             </div>
 
@@ -630,7 +672,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
             {/* Col 4: Ijtimoiy tarmoqlar */}
             <div className="space-y-2">
               <h5 className="text-xs font-bold text-white uppercase tracking-wider">
-                Ijtimoiy tarmoqlar
+                Aloqa & Bot
               </h5>
               <ul className="space-y-1.5 text-xs text-slate-400">
                 <li>
@@ -640,8 +682,9 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                   </a>
                 </li>
                 <li>
-                  <span className="hover:text-white cursor-pointer flex items-center gap-1.5">
-                    <span>Instagram</span>
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>shajarachi.uz</span>
                   </span>
                 </li>
               </ul>
@@ -649,7 +692,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
           </div>
 
           <div className="pt-6 border-t border-slate-800/60 text-center text-[11px] text-slate-500">
-            © 2026 MyShajara. Barcha huquqlar himoyalangan.
+            © 2026 Shajarachi (shajarachi.uz). Barcha huquqlar himoyalangan.
           </div>
         </footer>
 
