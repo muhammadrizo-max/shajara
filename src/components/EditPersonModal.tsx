@@ -75,6 +75,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [parentId, setParentId] = useState<string | null>(
     personToEdit ? personToEdit.parentId : parentForNewChild ? parentForNewChild.id : null
   );
+  const [isNoFatherSelected, setIsNoFatherSelected] = useState<boolean>(false);
 
   // Date and Life status
   const [isAlive, setIsAlive] = useState<boolean>(personToEdit?.isAlive !== false);
@@ -247,7 +248,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       name: name.trim(),
       surname: surname.trim() || undefined,
       gender,
-      parentId,
+      parentId: isNoFatherSelected ? null : parentId,
       birthDate: !onlyYearKnown && birthDate.trim() ? birthDate.trim() : undefined,
       birthYear: effectiveBirthYear || undefined,
       deathYear: !isAlive ? (deathYear.trim() || undefined) : undefined,
@@ -705,21 +706,41 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                 </div>
               </div>
             ) : (
-              <select
-                id="select-person-parent"
-                value={parentId || ''}
-                onChange={(e) => setParentId(e.target.value || null)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              >
-                <option value="">Bosh ajdod (Shajara boshi / ildiz)</option>
-                {(Object.values(people) as Person[])
-                  .filter((p) => !personToEdit || p.id !== personToEdit.id)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {p.surname || ''} — {p.generation}-pusht
-                    </option>
-                  ))}
-              </select>
+              <div className="space-y-1">
+                <select
+                  id="select-person-parent"
+                  value={isNoFatherSelected ? 'no_father' : (parentId || '')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'no_father') {
+                      setIsNoFatherSelected(true);
+                      setParentId(null);
+                    } else if (val === '') {
+                      setIsNoFatherSelected(false);
+                      setParentId(null);
+                    } else {
+                      setIsNoFatherSelected(false);
+                      setParentId(val);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="no_father">Ota belgilanmasin (Mustaqil / Otasiz)</option>
+                  <option value="">Bosh ajdod (Shajara boshi / ildiz)</option>
+                  {(Object.values(people) as Person[])
+                    .filter((p) => !personToEdit || p.id !== personToEdit.id)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.surname || ''} — {p.generation}-pusht
+                      </option>
+                    ))}
+                </select>
+                {isNoFatherSelected && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    ✓ Ota belgilanmadi (Mustaqil shaxs sifatida saqlanadi).
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

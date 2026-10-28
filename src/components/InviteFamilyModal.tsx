@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Person, FamilyInvite, AuthUser } from '../types';
 import { createFamilyInvite, getFamilyInvites } from '../utils/userAuthStorage';
 import { addHistoryRecord } from '../utils/historyStorage';
+import { saveInviteToSupabase } from '../utils/supabaseDb';
 import { 
   Users, 
   X, 
@@ -71,6 +72,19 @@ export const InviteFamilyModal: React.FC<InviteFamilyModalProps> = ({
     setLatestInvite(newInvite);
     setInvites(getFamilyInvites());
 
+    // Supabase'dagi invite_tokens jadvaliga yozish
+    saveInviteToSupabase({
+      token: newInvite.code,
+      familyId: currentUser?.familyId,
+      createdBy: currentUser?.id,
+      role: role === 'editor' ? 'editor' : 'viewer',
+      inviteType: targetPersonId ? 'person' : 'family',
+      targetPersonId: targetPersonId || undefined,
+      slotName: targetPerson ? `${targetPerson.name} ${targetPerson.surname || ''}`.trim() : undefined,
+      inviterName: actorName,
+      createdAt: Date.now(),
+    });
+
     // Tarixga yozish
     addHistoryRecord({
       action: 'member_invited',
@@ -85,9 +99,14 @@ export const InviteFamilyModal: React.FC<InviteFamilyModalProps> = ({
 
   const generateInviteUrl = (code: string, personId?: string) => {
     const params = new URLSearchParams();
-    params.set('invite', code);
+    params.set('token', code);
+    params.set('mode', 'guest');
     if (personId) params.set('personId', personId);
     return `${currentUrl}?${params.toString()}`;
+  };
+
+  const generateTelegramBotUrl = (code: string) => {
+    return `https://t.me/shajarachi_bot?start=invite_${code}`;
   };
 
   const handleCopyLink = (invite: FamilyInvite) => {
@@ -99,11 +118,11 @@ export const InviteFamilyModal: React.FC<InviteFamilyModalProps> = ({
   };
 
   const handleShareTelegram = (invite: FamilyInvite) => {
-    const url = generateInviteUrl(invite.code, invite.targetPersonId);
+    const tgUrl = generateTelegramBotUrl(invite.code);
     const text = encodeURIComponent(
-      `Assalomu alaykum! Sizni oilamizning «7 Ajdod Shajarasi»ga qo'shilishga va birgalikda ajdodlarimiz nasabnomasini boyitishga taklif qilaman.\n\nHavola orqali kiring: ${url}`
+      `Assalomu alaykum! Sizni oilamizning «Shajarachi» shajarasiga taklif qilaman.\n\nBot orqali kirish: ${tgUrl}`
     );
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${text}`, '_blank');
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(tgUrl)}&text=${text}`, '_blank');
   };
 
   return (

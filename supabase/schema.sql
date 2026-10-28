@@ -80,13 +80,31 @@ CREATE INDEX IF NOT EXISTS idx_persons_parent ON public.persons(parent_id);
 CREATE TABLE IF NOT EXISTS public.relationships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     family_id UUID REFERENCES public.families(id) ON DELETE CASCADE NOT NULL,
-    person1_id UUID REFERENCES public.persons(id) ON DELETE CASCADE NOT NULL,
-    person2_id UUID REFERENCES public.persons(id) ON DELETE CASCADE NOT NULL,
-    relation_type TEXT NOT NULL CHECK (relation_type IN ('spouse', 'parent_child', 'sibling', 'adopted')),
+    person_id UUID REFERENCES public.persons(id) ON DELETE CASCADE,
+    related_person_id UUID REFERENCES public.persons(id) ON DELETE CASCADE,
+    person1_id UUID REFERENCES public.persons(id) ON DELETE CASCADE,
+    person2_id UUID REFERENCES public.persons(id) ON DELETE CASCADE,
+    relation_type TEXT NOT NULL,
     notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    UNIQUE(family_id, person1_id, person2_id, relation_type)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- 7. TAKLIFNOMALAR JADVALI (invite_tokens)
+-- Telegram bot va WebApp o'rtasidagi taklifnomalar tokens jadvali
+CREATE TABLE IF NOT EXISTS public.invite_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    token TEXT NOT NULL UNIQUE,
+    family_id UUID REFERENCES public.families(id) ON DELETE CASCADE,
+    created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    role TEXT DEFAULT 'editor' CHECK (role IN ('viewer', 'editor', 'admin')),
+    invite_type TEXT DEFAULT 'family' CHECK (invite_type IN ('family', 'person')),
+    target_person_id UUID REFERENCES public.persons(id) ON DELETE SET NULL,
+    is_used BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_tokens_token ON public.invite_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_invite_tokens_family ON public.invite_tokens(family_id);
 
 -- ==========================================================
 -- 4-QADAM: ROW LEVEL SECURITY (RLS) XAVFSIZLIK QOIDALARI
@@ -98,6 +116,20 @@ ALTER TABLE public.families ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.family_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.persons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.relationships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invite_tokens ENABLE ROW LEVEL SECURITY;
+
+-- 5. INVITE_TOKENS qoidalari (Taklifnomalar)
+CREATE POLICY "Public can view valid invite tokens"
+ON public.invite_tokens FOR SELECT
+USING (true);
+
+CREATE POLICY "Authenticated users or members can create invite tokens"
+ON public.invite_tokens FOR INSERT
+WITH CHECK (true);
+
+CREATE POLICY "Token status can be updated when accepted"
+ON public.invite_tokens FOR UPDATE
+USING (true);
 
 -- 1. USERS qoidalari
 -- Foydalanuvchilar o'z profilini ko'ra oladi va yangilay oladi

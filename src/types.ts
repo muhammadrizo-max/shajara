@@ -28,6 +28,7 @@ export interface Person {
   spouseName?: string; // Turmush o'rtog'ining ismi
   motherId?: string; // Onasining IDsi
   motherName?: string; // Onasining ismi
+  linkedUserId?: string; // Supabase users.id bilan bog'lanish
 }
 
 export interface AuthUser {
@@ -39,6 +40,7 @@ export interface AuthUser {
   phone?: string;
   birthDate?: string;
   personId?: string | null; // agar shajarada topilsa
+  familyId?: string; // Supabase families.id
   isGuest?: boolean;
   role?: 'owner' | 'editor' | 'viewer';
   // Telegram integratsiya parametrlari

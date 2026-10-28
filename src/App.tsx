@@ -31,7 +31,7 @@ import { AddRelativeModal, RelativeRelationType } from './components/AddRelative
 import { ThemeMode, getInitialTheme, applyTheme } from './utils/theme';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
-import { syncPersonToSupabase, fetchInviteFromSupabase } from './utils/supabaseDb';
+import { syncPersonToSupabase, fetchInviteFromSupabase, loadFamilyDataFromSupabase } from './utils/supabaseDb';
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightSidebar } from './components/RightSidebar';
 import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
@@ -182,34 +182,58 @@ export default function App() {
     };
   }, []);
 
-  // Check URL parameters for invite links (?invite=ABC123 or ?slot=XYZ or tgWebAppStartParam)
+  // Check URL parameters: ?token=<TOKEN>&mode=guest or ?invite= or ?slot= or tgWebAppStartParam
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const inv = params.get('invite') || params.get('start_param');
+      const tgStart = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
+      const cleanTgStart = tgStart ? tgStart.replace('invite_', '').replace('slot_', '') : null;
+
+      // 5-band talabi: token va mode=guest
+      const token = params.get('token') || params.get('invite') || cleanTgStart || params.get('start_param');
+      const isGuestMode = params.get('mode') === 'guest';
       const slot = params.get('slot');
       const pId = params.get('personId');
-      
-      const tgStart = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
-      const effectiveCode = inv || slot || (tgStart ? tgStart.replace('invite_', '').replace('slot_', '') : null);
 
-      if (effectiveCode) {
-        setInviteCodeFromUrl(effectiveCode);
+      if (isGuestMode) {
+        setViewMode('guest');
+      }
+
+      if (token) {
+        setInviteCodeFromUrl(token);
         if (pId) setTargetPersonFromUrl(pId);
-        setIsLoginModalOpen(true);
 
-        fetchInviteFromSupabase(effectiveCode).then((inviteData) => {
+        fetchInviteFromSupabase(token).then(async (inviteData) => {
           if (inviteData) {
-            if (inviteData.slotPersonId) {
-              setTargetPersonFromUrl(inviteData.slotPersonId);
+            if (inviteData.targetPersonId) {
+              setTargetPersonFromUrl(inviteData.targetPersonId);
             }
-            if (inviteData.slotName) {
-              showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
+            if (inviteData.familyId) {
+              const famResult = await loadFamilyDataFromSupabase(inviteData.familyId);
+              if (famResult.success && famResult.people) {
+                setState((prev) => ({
+                  ...prev,
+                  people: famResult.people!,
+                  rootId: famResult.rootId || prev.rootId,
+                  meId: inviteData.targetPersonId && famResult.people![inviteData.targetPersonId] ? inviteData.targetPersonId : (famResult.meId || prev.meId),
+                }));
+              }
+            }
+
+            if (isGuestMode) {
+              showToast("Xush kelibsiz! Shajara ko'rish rejimida ochildi. 🌳", 'success');
             } else {
-              showToast("Shajaraga xush kelibsiz! Taklifnoma tasdiqlandi.", 'success');
+              setIsLoginModalOpen(true);
+              if (inviteData.slotName) {
+                showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
+              } else {
+                showToast("Shajaraga xush kelibsiz! Taklif kodi tasdiqlandi.", 'success');
+              }
             }
           }
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn("Could not fetch invite_tokens data:", err);
+        });
       }
     } catch (e) {
       console.warn("Could not parse URL query parameters:", e);

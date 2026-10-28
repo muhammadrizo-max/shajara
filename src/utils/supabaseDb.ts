@@ -1,8 +1,17 @@
 /**
  * supabaseDb.ts
- * Telegram bot yozgan Supabase ma'lumotlarini (users, families,
- * family_members, persons, relationships, invites) saytga yuklaydi va 
- * saytdagi o'zgarishlarni Supabase bilan real sinxronlashtiradi.
+ * Telegram bot va WebApp o'rtasidagi Supabase integratsiyasi.
+ * - public.users
+ * - public.families
+ * - public.family_members
+ * - public.persons
+ * - public.relationships
+ * - public.invite_tokens (yangi tokenlar jadvali)
+ * 
+ * Xavfsizlik:
+ * - Faqat VITE_SUPABASE_URL va VITE_SUPABASE_ANON_KEY ishlatiladi.
+ * - Hech qanday Service Role Key yoki Bot Token frontendga kiritilmaydi.
+ * - .env bo'lmaganda sayt xatoliksiz Lokal rejimda ishlaydi.
  */
 
 import { Person, AuthUser } from '../types';
@@ -14,8 +23,8 @@ const STORAGE_INVITES_FALLBACK = 'shajarachi_supabase_invites_cache';
 export function getSupabaseCredentials(): { url: string; key: string } {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-  const customUrl = localStorage.getItem(STORAGE_CUSTOM_URL) || '';
-  const customKey = localStorage.getItem(STORAGE_CUSTOM_KEY) || '';
+  const customUrl = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_CUSTOM_URL) || '' : '';
+  const customKey = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_CUSTOM_KEY) || '' : '';
 
   const url = customUrl || envUrl;
   const key = customKey || envKey;
@@ -23,6 +32,7 @@ export function getSupabaseCredentials(): { url: string; key: string } {
 }
 
 export function setSupabaseCredentials(url: string, key: string): void {
+  if (typeof localStorage === 'undefined') return;
   if (url) localStorage.setItem(STORAGE_CUSTOM_URL, url.trim());
   else localStorage.removeItem(STORAGE_CUSTOM_URL);
 
@@ -54,13 +64,15 @@ export function isSupabaseConfigured(): boolean {
 // Bazadagi persons yozuvini saytdagi Person formatiga o'tkazish
 // ---------------------------------------------------------------------------
 function dbPersonToLocal(p: any): Person {
+  const firstName = p.first_name || p.name || '';
+  const lastName = p.last_name || p.surname || '';
   return {
-    id: p.id,
-    name: p.first_name || p.name || '',
-    surname: p.last_name || p.surname || '',
+    id: String(p.id),
+    name: firstName,
+    surname: lastName || undefined,
     titleOrNickname: p.title_or_nickname || undefined,
     gender: p.gender === 'female' ? 'female' : 'male',
-    parentId: p.parent_id || null,
+    parentId: p.parent_id ? String(p.parent_id) : null,
     birthDate: p.birth_date || undefined,
     birthYear: p.birth_date ? String(p.birth_date).slice(0, 4) : (p.birth_year ? String(p.birth_year) : undefined),
     deathYear: p.death_date ? String(p.death_date).slice(0, 4) : (p.death_year ? String(p.death_year) : undefined),
@@ -68,8 +80,9 @@ function dbPersonToLocal(p: any): Person {
     photoUrl: p.photo_url || undefined,
     occupation: p.occupation || undefined,
     location: p.location || undefined,
-    notes: p.biography || p.notes || undefined,
+    notes: p.notes || p.biography || undefined,
     generation: p.generation || 1,
+    linkedUserId: p.linked_user_id || undefined,
   } as Person;
 }
 
@@ -88,7 +101,7 @@ export interface DbLoadResult {
 // ---------------------------------------------------------------------------
 export async function loadUserDataFromSupabase(telegramId: number): Promise<DbLoadResult> {
   if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase sozlanmagan' };
+    return { success: false, error: 'Supabase sozlanmagan (Lokal rejim)' };
   }
 
   const { url } = getSupabaseCredentials();
@@ -130,17 +143,19 @@ export async function loadUserDataFromSupabase(telegramId: number): Promise<DbLo
       return { success: false, error: 'persons fetch failed' };
     }
 
-    // 4. Qarindoshlik: person_id = ota-ona, related_person_id = farzand
+    // 4. Qarindoshlik: relationships
     const relRes = await fetch(
-      `${url}/rest/v1/relationships?family_id=eq.${familyId}&select=person_id,related_person_id,relation_type`,
+      `${url}/rest/v1/relationships?family_id=eq.${familyId}&select=*`,
       { headers: headers() }
     );
     const rels: any[] = await relRes.json();
     const parentOf: Record<string, string> = {};
     if (Array.isArray(rels)) {
       rels.forEach((r) => {
-        if (r.relation_type === 'parent' || r.relation_type === 'child') {
-          parentOf[r.related_person_id] = r.person_id;
+        const childId = r.related_person_id || r.person2_id;
+        const parentId = r.person_id || r.person1_id;
+        if ((r.relation_type === 'parent' || r.relation_type === 'child' || r.relation_type === 'parent_child') && childId && parentId) {
+          parentOf[childId] = parentId;
         }
       });
     }
@@ -153,7 +168,7 @@ export async function loadUserDataFromSupabase(telegramId: number): Promise<DbLo
       people[p.id] = person;
     });
 
-    // Avlod raqami: ota-ona zanjiri bo'yicha
+    // Avlod raqami: ota-ona zanjiri bo'yicha hisoblash
     Object.values(people).forEach((p) => {
       let g = 1;
       let cur: Person | undefined = p;
@@ -200,31 +215,122 @@ export async function loadUserDataFromSupabase(telegramId: number): Promise<DbLo
 }
 
 // ---------------------------------------------------------------------------
-// Real Supabase Taklifnomalarini Saqlash va O'qish (Invites)
+// Oila ID bo'yicha barcha shaxslarni Supabase'dan yuklash (Mehmon / Guest uchun)
 // ---------------------------------------------------------------------------
-export interface SupabaseInviteData {
-  code: string;
-  inviterId: string | number;
-  inviterName?: string;
-  inviteType: 'general' | 'slot';
-  slotName?: string;
-  slotPersonId?: string;
-  familyId?: string;
-  createdAt: number;
+export async function loadFamilyDataFromSupabase(familyId: string): Promise<DbLoadResult> {
+  if (!isSupabaseConfigured()) {
+    return { success: false, error: 'Supabase sozlanmagan' };
+  }
+
+  const { url } = getSupabaseCredentials();
+
+  try {
+    const personsRes = await fetch(
+      `${url}/rest/v1/persons?family_id=eq.${familyId}&select=*&order=created_at.asc`,
+      { headers: headers() }
+    );
+    if (!personsRes.ok) {
+      return { success: false, error: `persons fetch error: ${personsRes.status}` };
+    }
+    const dbPersons: any[] = await personsRes.json();
+    if (!Array.isArray(dbPersons) || dbPersons.length === 0) {
+      return { success: false, error: 'Oila ma\'lumotlari topilmadi' };
+    }
+
+    const relRes = await fetch(
+      `${url}/rest/v1/relationships?family_id=eq.${familyId}&select=*`,
+      { headers: headers() }
+    );
+    const rels: any[] = await relRes.json();
+    const parentOf: Record<string, string> = {};
+    if (Array.isArray(rels)) {
+      rels.forEach((r) => {
+        const childId = r.related_person_id || r.person2_id;
+        const parentId = r.person_id || r.person1_id;
+        if (childId && parentId) {
+          parentOf[childId] = parentId;
+        }
+      });
+    }
+
+    const people: Record<string, Person> = {};
+    dbPersons.forEach((p) => {
+      const person = dbPersonToLocal(p);
+      person.parentId = parentOf[p.id] || p.parent_id || null;
+      people[p.id] = person;
+    });
+
+    // Avlod raqamini hisoblash
+    Object.values(people).forEach((p) => {
+      let g = 1;
+      let cur: Person | undefined = p;
+      const seen = new Set<string>();
+      while (cur && cur.parentId && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        cur = people[cur.parentId];
+        if (cur) g++;
+      }
+      p.generation = g;
+    });
+
+    const root = dbPersons.find((p) => !parentOf[p.id] && !p.parent_id) || dbPersons[0];
+    const rootId: string = root?.id || '';
+
+    return {
+      success: true,
+      people,
+      rootId,
+      meId: rootId,
+      familyId,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Yuklashda xatolik' };
+  }
 }
 
-export async function saveInviteToSupabase(invite: SupabaseInviteData): Promise<boolean> {
-  // Har doim lokal keshga yozib qo'yamiz (offline va zaxira uchun)
+// ---------------------------------------------------------------------------
+// 1. TAKLIFNOMA (INVITE_TOKENS) TIZIMI — Bot bilan 100% uyg'un
+// Jadval: public.invite_tokens
+// Ustunlar:
+// - id (UUID)
+// - token (TEXT)
+// - family_id (UUID)
+// - created_by (UUID)
+// - role ('viewer' | 'editor' | 'admin')
+// - invite_type ('family' | 'person')
+// - target_person_id (UUID, ixtiyoriy)
+// - is_used (BOOLEAN, default: false)
+// - created_at (TIMESTAMP)
+// ---------------------------------------------------------------------------
+
+export interface SupabaseInviteTokenData {
+  id?: string;
+  token: string;
+  familyId?: string;
+  createdBy?: string;
+  role: 'viewer' | 'editor' | 'admin';
+  inviteType: 'family' | 'person';
+  targetPersonId?: string;
+  isUsed?: boolean;
+  createdAt?: string | number;
+  // Mijoz uchun qo'shimcha meta ma'lumotlar
+  slotName?: string;
+  inviterName?: string;
+}
+
+export async function saveInviteToSupabase(invite: SupabaseInviteTokenData): Promise<boolean> {
+  // Har doim lokal keshga zaxira qilib qo'yamiz (offline va tezkor tiklash uchun)
   try {
     const raw = localStorage.getItem(STORAGE_INVITES_FALLBACK);
-    const cached: Record<string, SupabaseInviteData> = raw ? JSON.parse(raw) : {};
-    cached[invite.code] = invite;
+    const cached: Record<string, SupabaseInviteTokenData> = raw ? JSON.parse(raw) : {};
+    cached[invite.token] = invite;
     localStorage.setItem(STORAGE_INVITES_FALLBACK, JSON.stringify(cached));
   } catch (e) {
-    console.warn("Could not cache invite locally:", e);
+    console.warn("Could not cache invite token locally:", e);
   }
 
   if (!isSupabaseConfigured()) {
+    console.info("[Supabase] Sozlanmagan — taklifnoma lokal keshda saqlandi.");
     return true;
   }
 
@@ -232,37 +338,45 @@ export async function saveInviteToSupabase(invite: SupabaseInviteData): Promise<
 
   try {
     const payload = {
-      code: invite.code,
-      inviter_id: String(invite.inviterId),
-      inviter_name: invite.inviterName || 'Foydalanuvchi',
-      invite_type: invite.inviteType,
-      slot_name: invite.slotName || null,
-      slot_person_id: invite.slotPersonId || null,
+      token: invite.token,
       family_id: invite.familyId || null,
-      metadata: { createdAt: invite.createdAt },
+      created_by: invite.createdBy || null,
+      role: invite.role || 'editor',
+      invite_type: invite.inviteType || 'family',
+      target_person_id: invite.targetPersonId || null,
+      is_used: false,
       created_at: new Date().toISOString(),
     };
 
-    const res = await fetch(`${url}/rest/v1/invites`, {
+    const res = await fetch(`${url}/rest/v1/invite_tokens`, {
       method: 'POST',
-      headers: headers(),
+      headers: {
+        ...headers(),
+        Prefer: 'resolution=merge-duplicates',
+      },
       body: JSON.stringify(payload),
     });
 
-    return res.ok;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn("[invite_tokens] Supabase saqlash xatosi:", errText);
+      return false;
+    }
+
+    return true;
   } catch (err) {
-    console.warn("Supabase invites sync warning (falling back to cache):", err);
+    console.warn("[invite_tokens] Supabase ulanish xatosi (lokal kesh ishlatiladi):", err);
     return true;
   }
 }
 
-export async function fetchInviteFromSupabase(code: string): Promise<SupabaseInviteData | null> {
+export async function fetchInviteFromSupabase(token: string): Promise<SupabaseInviteTokenData | null> {
   // 1. Lokal keshdan tekshirish
   try {
     const raw = localStorage.getItem(STORAGE_INVITES_FALLBACK);
     if (raw) {
       const cached = JSON.parse(raw);
-      if (cached[code]) return cached[code];
+      if (cached[token]) return cached[token];
     }
   } catch (e) {}
 
@@ -271,26 +385,28 @@ export async function fetchInviteFromSupabase(code: string): Promise<SupabaseInv
   const { url } = getSupabaseCredentials();
 
   try {
-    const res = await fetch(`${url}/rest/v1/invites?code=eq.${code}&select=*`, {
-      headers: headers(),
-    });
+    const res = await fetch(
+      `${url}/rest/v1/invite_tokens?token=eq.${encodeURIComponent(token)}&select=*`,
+      { headers: headers() }
+    );
     if (!res.ok) return null;
     const items = await res.json();
     if (Array.isArray(items) && items.length > 0) {
       const item = items[0];
       return {
-        code: item.code,
-        inviterId: item.inviter_id,
-        inviterName: item.inviter_name,
-        inviteType: item.invite_type || 'general',
-        slotName: item.slot_name || undefined,
-        slotPersonId: item.slot_person_id || undefined,
+        id: item.id,
+        token: item.token,
         familyId: item.family_id || undefined,
-        createdAt: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
+        createdBy: item.created_by || undefined,
+        role: item.role || 'editor',
+        inviteType: item.invite_type || 'family',
+        targetPersonId: item.target_person_id || undefined,
+        isUsed: item.is_used || false,
+        createdAt: item.created_at || Date.now(),
       };
     }
   } catch (err) {
-    console.warn("Could not fetch invite from Supabase:", err);
+    console.warn("Could not fetch invite_tokens from Supabase:", err);
   }
 
   return null;
@@ -298,6 +414,8 @@ export async function fetchInviteFromSupabase(code: string): Promise<SupabaseInv
 
 // ---------------------------------------------------------------------------
 // Shaxsni (Person) va Ota-Ona bog'lanishini Supabase bilan sinxronlash
+// Baza sxemasi:
+// persons: id, family_id, first_name, last_name, gender, parent_id, birth_date, is_living, photo_url, notes, linked_user_id
 // ---------------------------------------------------------------------------
 export async function syncPersonToSupabase(
   person: Person,
@@ -314,13 +432,17 @@ export async function syncPersonToSupabase(
       family_id: familyId || null,
       first_name: person.name,
       last_name: person.surname || null,
-      title_or_nickname: person.titleOrNickname || null,
+      name: person.name, // orqaga moslik uchun
       gender: person.gender,
       parent_id: person.parentId || null,
       birth_date: person.birthDate || null,
+      birth_year: person.birthYear || null,
+      death_year: person.deathYear || null,
       is_living: person.isAlive !== false,
       photo_url: person.photoUrl || null,
+      notes: person.notes || null,
       biography: person.notes || null,
+      linked_user_id: person.linkedUserId || null,
       created_by: userId || null,
     };
 
@@ -333,7 +455,7 @@ export async function syncPersonToSupabase(
       body: JSON.stringify(personPayload),
     });
 
-    // Agar ota-onasi bo'lsa, relationships jadvalini ham yangilaymiz
+    // Agar otasi/onasi ko'rsatilgan bo'lsa, relationships jadvalini ham yangilaymiz
     if (person.parentId) {
       await fetch(`${url}/rest/v1/relationships`, {
         method: 'POST',
@@ -342,10 +464,12 @@ export async function syncPersonToSupabase(
           Prefer: 'resolution=merge-duplicates',
         },
         body: JSON.stringify({
+          family_id: familyId || null,
           person_id: person.parentId, // ota
           related_person_id: person.id, // farzand
+          person1_id: person.parentId,
+          person2_id: person.id,
           relation_type: 'child',
-          family_id: familyId || null,
         }),
       }).catch(() => {});
     }

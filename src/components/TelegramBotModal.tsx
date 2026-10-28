@@ -58,15 +58,16 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
 
   // Hozirgi aktiv kod va havolalarni hisoblash
   const currentCode = inviteType === 'general' ? generalCode : slotCode;
-  const startParam = inviteType === 'general' ? `invite_${currentCode}` : `slot_${currentCode}`;
+  // Taklif havolasi formati: https://t.me/<BOT_USERNAME>?start=invite_${token}
+  const startParam = `invite_${currentCode}`;
   const telegramBotLink = `https://t.me/${botUsername}?start=${startParam}`;
 
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://shajarachi.vercel.app';
   const webAppLink = inviteType === 'general'
-    ? `${originUrl}/?invite=${currentCode}`
-    : `${originUrl}/?invite=${currentCode}&slot=${currentCode}&name=${encodeURIComponent(slotPersonName.trim() || 'Azo')}`;
+    ? `${originUrl}/?token=${currentCode}&mode=guest`
+    : `${originUrl}/?token=${currentCode}&mode=guest&slot=${currentCode}&name=${encodeURIComponent(slotPersonName.trim() || 'Azo')}`;
 
-  // Supabase'ga taklifnomani yozish
+  // Supabase'dagi invite_tokens jadvaliga taklifnomani yozish
   useEffect(() => {
     if (!isOpen) return;
 
@@ -75,15 +76,17 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
     }
 
     saveInviteToSupabase({
-      code: currentCode,
-      inviterId,
-      inviterName,
-      inviteType,
+      token: currentCode,
+      familyId: currentUser?.familyId,
+      createdBy: currentUser?.id,
+      role: 'editor',
+      inviteType: inviteType === 'general' ? 'family' : 'person',
+      targetPersonId: inviteType === 'slot' ? slotExistingPersonId || undefined : undefined,
       slotName: inviteType === 'slot' ? slotPersonName.trim() : undefined,
-      slotPersonId: inviteType === 'slot' ? slotExistingPersonId || undefined : undefined,
+      inviterName,
       createdAt: Date.now(),
     });
-  }, [isOpen, inviteType, currentCode, slotPersonName, slotExistingPersonId, inviterId, inviterName]);
+  }, [isOpen, inviteType, currentCode, slotPersonName, slotExistingPersonId, inviterId, inviterName, currentUser?.familyId, currentUser?.id]);
 
   if (!isOpen) return null;
 
