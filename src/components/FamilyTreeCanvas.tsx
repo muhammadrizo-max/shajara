@@ -32,6 +32,7 @@ interface FamilyTreeCanvasProps {
   onEditPerson: (person: Person) => void;
   onAddChild: (parent: Person) => void;
   onAddParent?: (child: Person) => void;
+  onOpenAddRelative?: (person: Person) => void;
   onSetTemporaryPerspective: (personId: string) => void;
   onClearTemporaryPerspective: () => void;
   onUnauthorizedEditAttempt: () => void;
@@ -52,6 +53,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   onEditPerson,
   onAddChild,
   onAddParent,
+  onOpenAddRelative,
   onSetTemporaryPerspective,
   onClearTemporaryPerspective,
   onUnauthorizedEditAttempt,
@@ -359,6 +361,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
             onEdit={onEditPerson}
             onAddChild={onAddChild}
             onAddParent={onAddParent}
+            onOpenAddRelative={onOpenAddRelative}
             onSetTemporaryPerspective={onSetTemporaryPerspective}
             onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
             isSelected={selectedPersonId === person.id}
@@ -516,15 +519,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
         </button>
       </div>
 
-      {/* Canvas Info Badge on Desktop */}
-      <div className="absolute bottom-4 left-4 z-20 hidden sm:flex items-center gap-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm text-xs text-slate-600 dark:text-slate-400">
-        <div className="flex items-center gap-1.5">
-          <Move className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Surish: Barmoq / sichqoncha bilan torting</span>
-        </div>
-        <div className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
-        <div>Masshtab: 2 barmoq bilan chimchilash (pinch) yoki +/- tugmalari</div>
-      </div>
+      {/* Draggable & Scalable Workspace */}
 
       {/* Draggable & Scalable Workspace */}
       <div

@@ -24,6 +24,10 @@ export interface Person {
   notes?: string; // Qisqacha tarjimai holi / xotiralar
   generation: number; // 1 dan boshlab
   order?: number; // Farzandlar orasidagi tartibi
+  spouseId?: string; // Turmush o'rtog'ining IDsi
+  spouseName?: string; // Turmush o'rtog'ining ismi
+  motherId?: string; // Onasining IDsi
+  motherName?: string; // Onasining ismi
 }
 
 export interface AuthUser {

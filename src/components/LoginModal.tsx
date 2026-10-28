@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Bot
 } from 'lucide-react';
+import { GoogleAccountChooserModal } from './GoogleAccountChooserModal';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -51,6 +52,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   // Ilk marta kelgan foydalanuvchilar uchun boshlang'ich tab HAR DOIM 'register' (Ro'yxatdan o'tish)
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   
+  // Google Account Chooser modal state (2-rasm)
+  const [isGoogleChooserOpen, setIsGoogleChooserOpen] = useState<boolean>(false);
+
   // Register state
   const [regFullName, setRegFullName] = useState<string>('');
   const [regGender, setRegGender] = useState<Gender>('male');
@@ -141,19 +145,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   const handleGoogleLogin = () => {
-    const defaultEmail = "muhammadrizoxudoberdiyev834@gmail.com";
-    const enteredEmail = prompt("Google hisobingiz email manzilini kiriting (yoki tezkor kirish uchun OK ni bosing):", defaultEmail);
-    if (enteredEmail === null) return;
-    const effectiveEmail = enteredEmail.trim() || defaultEmail;
-    const namePart = effectiveEmail.split('@')[0].replace(/[._-]/g, ' ');
-    const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+    setError('');
+    setIsGoogleChooserOpen(true);
+  };
 
+  const handleSelectGoogleAccount = (acc: { name: string; email: string }) => {
+    setIsGoogleChooserOpen(false);
+    setError('');
+    const parts = acc.name.trim().split(' ');
     const authUser: AuthUser = {
       id: `google_${Date.now()}`,
-      name: formattedName.split(' ')[0] || "Foydalanuvchi",
-      surname: formattedName.split(' ')[1] || undefined,
-      fullName: formattedName,
-      email: effectiveEmail,
+      name: parts[0] || acc.name,
+      surname: parts.slice(1).join(' ') || undefined,
+      fullName: acc.name,
+      email: acc.email,
       role: isTreeEmpty ? 'owner' : 'editor',
       isGuest: false,
       authProvider: 'credentials',
@@ -163,7 +168,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       action: 'user_registered',
       actorName: authUser.fullName || authUser.name,
       title: "Google orqali tizimga kirildi",
-      description: `${authUser.fullName} Google hisobi orqali tizimga kirdi.`,
+      description: `${authUser.fullName} (${acc.email}) Google hisobi orqali tizimga kirdi.`,
       details: `Email: ${authUser.email}`
     });
 
@@ -208,7 +213,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     onLogin(authUser);
   };
 
-  // Telegram orqali tezkor va parolsiz kirish
+  // Telegram orqali tezkor va parolsiz kirish (3-rasmdagi prompt o'rniga to'g'ridan-to'g'ri botga yo'naltirish)
   const handleTelegramLogin = () => {
     setError('');
     const twaUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
@@ -235,31 +240,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       };
       onLogin(authUser, { gender: 'male' });
     } else {
-      const inputUsername = window.prompt("Telegram username yoki to'liq ismingizni kiriting:", "Alisher");
-      if (!inputUsername) return;
-
-      const mockTgUser = {
-        id: Math.floor(100000000 + Math.random() * 900000000),
-        first_name: inputUsername.replace('@', ''),
-        username: inputUsername.replace('@', ''),
-      };
-      const res = loginWithTelegram(mockTgUser);
-      const parts = res.user.fullName.split(' ');
-      const authUser: AuthUser = {
-        id: res.user.id,
-        name: parts[0] || res.user.fullName,
-        surname: parts.slice(1).join(' ') || undefined,
-        fullName: res.user.fullName,
-        email: res.user.email,
-        phone: res.user.phone,
-        personId: res.user.personId,
-        role: res.user.role,
-        isGuest: false,
-        telegramId: res.user.telegramId,
-        telegramUsername: res.user.telegramUsername,
-        authProvider: 'telegram',
-      };
-      onLogin(authUser, { gender: 'male' });
+      // Prompt oynasi o'rniga to'g'ridan-to'g'ri Telegram botga yo'naltirish
+      try {
+        window.open('https://t.me/shajarachi_bot?start=login', '_blank');
+      } catch {
+        window.location.href = 'https://t.me/shajarachi_bot?start=login';
+      }
     }
   };
 
@@ -347,39 +333,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <div className="flex-1">{error}</div>
             </div>
           )}
-
-          {/* Telegram orqali tezkor kirish tugmasi */}
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-sky-50 to-cyan-50 dark:from-slate-800/80 dark:to-cyan-950/30 border border-sky-200 dark:border-sky-900/50 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#24A1DE] text-white flex items-center justify-center shrink-0 shadow-sm">
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.61 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.89.03-.25.38-.51 1.05-.78 4.12-1.79 6.87-2.97 8.25-3.54 3.92-1.63 4.74-1.91 5.27-1.92.12 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.19-.04.34z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Telegram orqali parolsiz kirish
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  Python bot (@shajarachi_bot) orqali avtomatik bog'lanadi
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleTelegramLogin}
-              className="px-3.5 py-2 rounded-xl bg-[#24A1DE] hover:bg-[#1E8BC0] text-white text-xs font-bold shadow-sm transition active:scale-95 shrink-0"
-            >
-              Telegram bilan kirish
-            </button>
-          </div>
-
-          <div className="relative flex items-center justify-center my-1">
-            <div className="border-t border-slate-200 dark:border-slate-700 w-full" />
-            <span className="bg-white dark:bg-slate-900 px-3 text-[11px] text-slate-400 uppercase tracking-wider shrink-0 font-medium">
-              Yoki quyidagi formani to'ldiring
-            </span>
-          </div>
 
           {/* TAB 1: RO'YXATDAN O'TISH (REGISTER) */}
           {activeTab === 'register' && (
@@ -595,6 +548,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
       </div>
+
+      {/* Google Account Chooser Modal (2-rasmdagi rasmiy hisob tanlash) */}
+      <GoogleAccountChooserModal
+        isOpen={isGoogleChooserOpen}
+        onClose={() => setIsGoogleChooserOpen(false)}
+        onSelectAccount={handleSelectGoogleAccount}
+        onOpenPolicy={onOpenPolicy ? (t) => onOpenPolicy(t === 'terms' ? 'terms' : 'privacy') : undefined}
+      />
     </div>
   );
 };

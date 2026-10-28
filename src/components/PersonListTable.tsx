@@ -162,7 +162,9 @@ export const PersonListTable: React.FC<PersonListTableProps> = ({
             const isMale = person.gender === 'male';
           const kinship = calculateKinship(effectiveMeId, person.id, people);
           const parent = person.parentId ? people[person.parentId] : null;
-          const canEdit = Boolean(currentUser && currentUser.personId === person.id);
+          const isOwner = currentUser?.role === 'owner' || (!currentUser && isMe);
+          const isSelf = Boolean((currentUser && currentUser.personId === person.id) || isMe);
+          const canEdit = isOwner || isSelf;
 
           return (
             <div

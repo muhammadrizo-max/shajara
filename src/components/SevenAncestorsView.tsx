@@ -100,7 +100,9 @@ export const SevenAncestorsView: React.FC<SevenAncestorsViewProps> = ({
             };
             const isMe = idx === 0;
             const isRoot = idx === lineage.length - 1;
-            const canEdit = Boolean(currentUser && currentUser.personId === person.id);
+            const isOwner = currentUser?.role === 'owner' || (!currentUser && isMe);
+            const isSelf = Boolean((currentUser && currentUser.personId === person.id) || isMe);
+            const canEdit = isOwner || isSelf;
 
             return (
               <div

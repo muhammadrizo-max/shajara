@@ -32,6 +32,7 @@ interface PersonDetailDrawerProps {
   onEditPerson: (person: Person) => void;
   onAddChild: (parent: Person) => void;
   onAddParent?: (child: Person) => void;
+  onOpenAddRelative?: (person: Person) => void;
   onSetTemporaryPerspective: (personId: string) => void;
   onDeletePerson: (personId: string) => void;
   onUnauthorizedEditAttempt?: () => void;
@@ -48,6 +49,7 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
   onEditPerson,
   onAddChild,
   onAddParent,
+  onOpenAddRelative,
   onSetTemporaryPerspective,
   onDeletePerson,
   onUnauthorizedEditAttempt,
@@ -64,7 +66,12 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
   const children = getChildren(person.id, people);
   const siblings = getSiblings(person.id, people);
 
-  const canEdit = Boolean(currentUser && currentUser.personId === person.id);
+  // Maxfiylik qoidasi: Shajara egasi hammasinikini tahrirlay oladi, boshqalar FAQAT o'zinikini
+  const isViewer = currentUser?.role === 'viewer';
+  const isOwner = currentUser?.role === 'owner' || (!currentUser && isMe);
+  const isSelf = Boolean((currentUser && currentUser.personId === person.id) || isMe);
+  const canEdit = !isViewer && (isOwner || isSelf);
+  const canAddRelative = !isViewer && (isOwner || isSelf);
 
   const handleEditClick = () => {
     if (canEdit) {
@@ -211,24 +218,24 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
 
             {/* Quick Actions */}
             <div className="grid grid-cols-2 gap-2">
-              {canEdit ? (
+              {canAddRelative ? (
                 <button
-                  id="btn-drawer-add-child"
-                  onClick={() => onAddChild(person)}
-                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                  id="btn-drawer-add-relative"
+                  onClick={() => onOpenAddRelative ? onOpenAddRelative(person) : onAddChild(person)}
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Farzand qo'shish</span>
+                  <span>+ Qarindosh qo'shish</span>
                 </button>
               ) : (
                 <button
-                  id="btn-drawer-add-child-disabled"
-                  onClick={() => onUnauthorizedEditAttempt && onUnauthorizedEditAttempt()}
+                  id="btn-drawer-add-relative-disabled"
+                  onClick={() => onUnauthorizedEditAttempt && onUnauthorizedEditAttempt("Xavfsizlik: Siz faqat o'z profilingizga qarindosh qo'sha olasiz. Butun shajarani boshqarish faqat Shajara egasiga ruxsat etilgan.")}
                   className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-500 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-not-allowed"
-                  title="Faqat o'z profilingizga farzand qo'sha olasiz"
+                  title="Faqat o'z profilingizga qarindosh qo'sha olasiz"
                 >
                   <Lock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Farzand qo'shish (yopiq)</span>
+                  <span>Qarindosh (yopiq)</span>
                 </button>
               )}
 
@@ -236,10 +243,10 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
                 <button
                   id="btn-drawer-edit"
                   onClick={handleEditClick}
-                  className="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                  className="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                 >
                   <Edit3 className="w-4 h-4" />
-                  <span>O'z profilingizni tahrirlash</span>
+                  <span>{isOwner ? "Ma'lumotlarni tahrirlash" : "O'z profilingizni tahrirlash"}</span>
                 </button>
               ) : (
                 <button
@@ -481,8 +488,8 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
               )}
             </div>
 
-            {/* Danger Zone: Delete Person */}
-            {!isMe && person.parentId !== null && (
+            {/* Danger Zone: Delete Person (Faqat shajara egasi o'chira oladi) */}
+            {isOwner && !isMe && (
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   id={`btn-delete-${person.id}`}

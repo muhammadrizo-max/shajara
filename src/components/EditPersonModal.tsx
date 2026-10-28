@@ -22,6 +22,9 @@ interface EditPersonModalProps {
   personToEdit: Person | null;
   parentForNewChild: Person | null;
   childForNewParent?: Person | null;
+  spouseForPerson?: Person | null;
+  targetRelationType?: 'father' | 'mother' | 'spouse' | 'son' | 'daughter' | null;
+  initialGender?: Gender;
   people: Record<string, Person>;
   onSave: (person: Person) => void;
   onSaveWithRelation?: (newPerson: Person, relatedPerson?: Person) => void;
@@ -44,6 +47,9 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   personToEdit,
   parentForNewChild,
   childForNewParent,
+  spouseForPerson,
+  targetRelationType,
+  initialGender,
   people,
   onSave,
   onSaveWithRelation,
@@ -53,12 +59,19 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const isEditing = !!personToEdit;
   const isAddingChild = !!parentForNewChild;
   const isAddingParent = !!childForNewParent;
+  const isAddingSpouse = !!spouseForPerson;
+
+  const defaultGender: Gender = personToEdit?.gender || initialGender || (
+    targetRelationType === 'mother' || targetRelationType === 'daughter'
+      ? 'female'
+      : targetRelationType === 'spouse' && spouseForPerson
+      ? (spouseForPerson.gender === 'male' ? 'female' : 'male')
+      : 'male'
+  );
 
   const [name, setName] = useState<string>(personToEdit?.name || '');
   const [surname, setSurname] = useState<string>(personToEdit?.surname || '');
-  const [gender, setGender] = useState<Gender>(
-    personToEdit?.gender || (isAddingParent ? 'male' : 'male')
-  );
+  const [gender, setGender] = useState<Gender>(defaultGender);
   const [parentId, setParentId] = useState<string | null>(
     personToEdit ? personToEdit.parentId : parentForNewChild ? parentForNewChild.id : null
   );
@@ -249,16 +262,52 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       generation: calculatedGeneration,
     };
 
-    if (isAddingParent && childForNewParent) {
-      const updatedChild: Person = {
-        ...childForNewParent,
-        parentId: updatedPerson.id,
+    if (isAddingSpouse && spouseForPerson) {
+      const updatedPersonWithSpouse: Person = {
+        ...updatedPerson,
+        spouseId: spouseForPerson.id,
+        spouseName: spouseForPerson.name,
+        generation: spouseForPerson.generation,
+      };
+      const updatedSpouse: Person = {
+        ...spouseForPerson,
+        spouseId: updatedPerson.id,
+        spouseName: `${updatedPerson.name} ${updatedPerson.surname || ''}`.trim(),
       };
       if (onSaveWithRelation) {
-        onSaveWithRelation(updatedPerson, updatedChild);
+        onSaveWithRelation(updatedPersonWithSpouse, updatedSpouse);
       } else {
-        onSave(updatedPerson);
-        onSave(updatedChild);
+        onSave(updatedPersonWithSpouse);
+        onSave(updatedSpouse);
+      }
+    } else if (isAddingParent && childForNewParent) {
+      if (gender === 'female') {
+        const updatedMother: Person = {
+          ...updatedPerson,
+          generation: Math.max(1, childForNewParent.generation - 1),
+        };
+        const updatedChild: Person = {
+          ...childForNewParent,
+          motherId: updatedPerson.id,
+          motherName: `${updatedPerson.name} ${updatedPerson.surname || ''}`.trim(),
+        };
+        if (onSaveWithRelation) {
+          onSaveWithRelation(updatedMother, updatedChild);
+        } else {
+          onSave(updatedMother);
+          onSave(updatedChild);
+        }
+      } else {
+        const updatedChild: Person = {
+          ...childForNewParent,
+          parentId: updatedPerson.id,
+        };
+        if (onSaveWithRelation) {
+          onSaveWithRelation(updatedPerson, updatedChild);
+        } else {
+          onSave(updatedPerson);
+          onSave(updatedChild);
+        }
       }
     } else {
       onSave(updatedPerson);
@@ -288,6 +337,16 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">
               {isEditing
                 ? "Shaxs ma'lumotlarini tahrirlash"
+                : targetRelationType === 'father' && childForNewParent
+                ? `«${childForNewParent.name}»ga Ota qo'shish`
+                : targetRelationType === 'mother' && childForNewParent
+                ? `«${childForNewParent.name}»ga Ona qo'shish`
+                : targetRelationType === 'spouse' && spouseForPerson
+                ? `«${spouseForPerson.name}»ga Turmush o'rtoq qo'shish`
+                : targetRelationType === 'son' && parentForNewChild
+                ? `«${parentForNewChild.name}»ga O'g'il farzand qo'shish`
+                : targetRelationType === 'daughter' && parentForNewChild
+                ? `«${parentForNewChild.name}»ga Qiz farzand qo'shish`
                 : isAddingParent
                 ? `«${childForNewParent?.name}» uchun ota qo'shish`
                 : isAddingChild

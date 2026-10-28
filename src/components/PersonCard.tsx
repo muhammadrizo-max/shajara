@@ -30,6 +30,7 @@ interface PersonCardProps {
   onEdit: (person: Person) => void;
   onAddChild: (parent: Person) => void;
   onAddParent?: (child: Person) => void;
+  onOpenAddRelative?: (person: Person) => void;
   onSetTemporaryPerspective: (personId: string) => void;
   onUnauthorizedEditAttempt?: () => void;
   isSelected?: boolean;
@@ -50,6 +51,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   onEdit,
   onAddChild,
   onAddParent,
+  onOpenAddRelative,
   onSetTemporaryPerspective,
   onUnauthorizedEditAttempt,
   isSelected = false,
@@ -65,8 +67,12 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   const kinship: RelativeRelationInfo = calculateKinship(effectiveMeId, person.id, people);
 
   const isViewer = currentUser?.role === 'viewer';
-  const canEdit = !isViewer && Boolean(!currentUser || currentUser.personId === person.id || currentUser.role === 'owner');
-  const canAddRelative = !isViewer;
+  const isOwner = currentUser?.role === 'owner' || (!currentUser && isMe);
+  const isSelf = Boolean((currentUser && currentUser.personId === person.id) || isMe);
+
+  // Maxfiylik qoidasi: Shajara egasi hammasinikini tahrirlay oladi, boshqalar FAQAT o'zinikini
+  const canEdit = !isViewer && (isOwner || isSelf);
+  const canAddRelative = !isViewer && (isOwner || isSelf);
 
   const getBadgeColor = () => {
     if (person.id === effectiveMeId) return 'bg-emerald-500 text-white font-bold ring-2 ring-emerald-300';
@@ -310,35 +316,19 @@ export const PersonCard: React.FC<PersonCardProps> = ({
               </button>
             )}
 
-            {/* Add Parent / Ota qo'shish (Agar otasi hali kiritilmagan bo'lsa) */}
-            {(!person.parentId || !people[person.parentId]) && onAddParent && canAddRelative && (
+            {/* Unified + Qarindosh qo'shish button (5-rasm talabi) */}
+            {canAddRelative && onOpenAddRelative && (
               <button
-                id={`btn-add-parent-${person.id}`}
+                id={`btn-add-relative-${person.id}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAddParent(person);
+                  onOpenAddRelative(person);
                 }}
-                title="Ushbu shaxsga ota qo'shish (Yuqori bo'g'in)"
-                className="px-2 py-1 rounded-lg text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-900/50 flex items-center gap-1 transition-colors"
+                title="Qarindosh qo'shish (Ota, Ona, Turmush o'rtoq, Farzand)"
+                className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Ota</span>
-              </button>
-            )}
-
-            {/* Add Child / Farzand qo'shish */}
-            {canAddRelative && (
-              <button
-                id={`btn-add-child-${person.id}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddChild(person);
-                }}
-                title="Farzand / zurriyot qo'shish"
-                className="px-2 py-1 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 flex items-center gap-1 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Farzand</span>
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Qarindosh</span>
               </button>
             )}
           </div>

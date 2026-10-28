@@ -27,6 +27,7 @@ import { TelegramBotModal } from './components/TelegramBotModal';
 import { GuestLandingView } from './components/GuestLandingView';
 import { FamilyAlbumView } from './components/FamilyAlbumView';
 import { LegalPolicyModal, PolicyType } from './components/LegalPolicyModal';
+import { AddRelativeModal, RelativeRelationType } from './components/AddRelativeModal';
 import { ThemeMode, getInitialTheme, applyTheme } from './utils/theme';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
@@ -73,6 +74,13 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [isTelegramBotModalOpen, setIsTelegramBotModalOpen] = useState<boolean>(false);
+
+  // Relative addition modal state (+ Ota, Ona, Turmush o'rtoq, O'g'il, Qiz)
+  const [isAddRelativeModalOpen, setIsAddRelativeModalOpen] = useState<boolean>(false);
+  const [targetPersonForRelativeModal, setTargetPersonForRelativeModal] = useState<Person | null>(null);
+  const [spouseForNewPerson, setSpouseForNewPerson] = useState<Person | null>(null);
+  const [targetRelationType, setTargetRelationType] = useState<RelativeRelationType | null>(null);
+  const [initialGenderForModal, setInitialGenderForModal] = useState<Gender | undefined>(undefined);
 
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
@@ -462,9 +470,49 @@ export default function App() {
     showToast("Shaxs va uning shoxlari shajaradan o'chirildi.");
   };
 
+  const handleOpenAddRelative = (person: Person) => {
+    setTargetPersonForRelativeModal(person);
+    setIsAddRelativeModalOpen(true);
+  };
+
+  const handleSelectRelation = (type: RelativeRelationType, targetPerson: Person) => {
+    setTargetRelationType(type);
+    setPersonToEdit(null);
+    if (type === 'father') {
+      setChildForNewParent(targetPerson);
+      setParentForNewChild(null);
+      setSpouseForNewPerson(null);
+      setInitialGenderForModal('male');
+    } else if (type === 'mother') {
+      setChildForNewParent(targetPerson);
+      setParentForNewChild(null);
+      setSpouseForNewPerson(null);
+      setInitialGenderForModal('female');
+    } else if (type === 'spouse') {
+      setSpouseForNewPerson(targetPerson);
+      setChildForNewParent(null);
+      setParentForNewChild(null);
+      setInitialGenderForModal(targetPerson.gender === 'male' ? 'female' : 'male');
+    } else if (type === 'son') {
+      setParentForNewChild(targetPerson);
+      setChildForNewParent(null);
+      setSpouseForNewPerson(null);
+      setInitialGenderForModal('male');
+    } else if (type === 'daughter') {
+      setParentForNewChild(targetPerson);
+      setChildForNewParent(null);
+      setSpouseForNewPerson(null);
+      setInitialGenderForModal('female');
+    }
+    setIsEditModalOpen(true);
+  };
+
   const handleAddParent = (child: Person) => {
     setChildForNewParent(child);
     setParentForNewChild(null);
+    setSpouseForNewPerson(null);
+    setTargetRelationType('father');
+    setInitialGenderForModal('male');
     setPersonToEdit(null);
     setIsEditModalOpen(true);
   };
@@ -650,6 +698,7 @@ export default function App() {
               onEditPerson={handleEditPerson}
               onAddChild={handleAddChild}
               onAddParent={handleAddParent}
+              onOpenAddRelative={handleOpenAddRelative}
               onSetTemporaryPerspective={handleSetTemporaryPerspective}
               onClearTemporaryPerspective={handleClearTemporaryPerspective}
               onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
@@ -734,6 +783,7 @@ export default function App() {
           onEditPerson={handleEditPerson}
           onAddChild={handleAddChild}
           onAddParent={handleAddParent}
+          onOpenAddRelative={handleOpenAddRelative}
           onSetTemporaryPerspective={handleSetTemporaryPerspective}
           onDeletePerson={handleDeletePerson}
           onUnauthorizedEditAttempt={handleUnauthorizedEditAttempt}
@@ -747,14 +797,28 @@ export default function App() {
           setIsEditModalOpen(false);
           setChildForNewParent(null);
           setParentForNewChild(null);
+          setSpouseForNewPerson(null);
+          setTargetRelationType(null);
+          setInitialGenderForModal(undefined);
           setPersonToEdit(null);
         }}
         personToEdit={personToEdit}
         parentForNewChild={parentForNewChild}
         childForNewParent={childForNewParent}
+        spouseForPerson={spouseForNewPerson}
+        targetRelationType={targetRelationType}
+        initialGender={initialGenderForModal}
         people={state.people}
         onSave={handleSavePerson}
         onSaveWithRelation={handleSavePersonWithRelation}
+      />
+
+      {/* Qarindosh tanlash modali (+ Ota, Ona, Turmush o'rtoq, O'g'il, Qiz farzand) */}
+      <AddRelativeModal
+        isOpen={isAddRelativeModalOpen}
+        onClose={() => setIsAddRelativeModalOpen(false)}
+        targetPerson={targetPersonForRelativeModal}
+        onSelectRelation={handleSelectRelation}
       />
 
       {/* Kinship Calculator Modal */}
