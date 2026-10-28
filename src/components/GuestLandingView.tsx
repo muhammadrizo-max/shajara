@@ -19,19 +19,25 @@ import {
   Play
 } from 'lucide-react';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
+import { Person } from '../types';
+import { supabase } from '../utils/supabaseClient';
 
 interface GuestLandingViewProps {
+  people?: Record<string, Person>;
   onOpenLoginModal: () => void;
   onOpenTelegramBotModal: () => void;
   onViewTree: () => void;
   onOpenCalcModal?: () => void;
+  onOpenPolicy?: (type: 'privacy' | 'terms' | 'offer' | 'consent') => void;
 }
 
 export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
+  people = {},
   onOpenLoginModal,
   onOpenTelegramBotModal,
   onViewTree,
   onOpenCalcModal,
+  onOpenPolicy,
 }) => {
   const [selectedDemoIndex, setSelectedDemoIndex] = useState<number>(3); // "Siz"
   const [contactEmail, setContactEmail] = useState('');
@@ -39,20 +45,56 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
   const [isSent, setIsSent] = useState(false);
   const [activeLang, setActiveLang] = useState<'UZ' | 'ЎЗ' | 'РУ' | 'EN'>('UZ');
 
+  // Real statistics calculation based on people in tree
+  const peopleList = Object.values(people) as Person[];
+  const realPeopleCount = peopleList.length;
+  const realPhotoCount = peopleList.filter((p) => !!p.photoUrl).length;
+  const realGenerationsCount = peopleList.length > 0
+    ? Math.max(...peopleList.map((p) => p.generation || 1), 1)
+    : 0;
+
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contactEmail.trim() || !contactMessage.trim()) return;
+
+    const payload = {
+      id: `msg_${Date.now()}`,
+      email: contactEmail.trim(),
+      message: contactMessage.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    // 1. Local backup in localStorage
+    try {
+      const existingRaw = localStorage.getItem('myshajara_contact_messages') || '[]';
+      const existing = JSON.parse(existingRaw);
+      existing.unshift(payload);
+      localStorage.setItem('myshajara_contact_messages', JSON.stringify(existing.slice(0, 50)));
+    } catch (err) {
+      console.warn("Could not save to localStorage:", err);
+    }
+
+    // 2. Try Supabase insert if table exists
+    if (supabase) {
+      try {
+        await supabase.from('contact_messages').insert([payload]);
+      } catch (err) {
+        // Safe fallback if table not yet provisioned
+        console.info("Supabase feedback saved locally:", payload);
+      }
+    }
+
     setIsSent(true);
     setTimeout(() => {
       setContactEmail('');
       setContactMessage('');
       setIsSent(false);
-    }, 4000);
+    }, 5000);
   };
 
   const SEVEN_ANCESTORS = [
@@ -328,32 +370,32 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
           </div>
         </section>
 
-        {/* 4. STATS NUMBERS BAR (Matching 2-rasm) */}
+        {/* 4. STATS NUMBERS BAR (Matching 2-rasm - Haqiqiy va dinamik ko'rsatkichlar) */}
         <section className="p-6 sm:p-8 rounded-3xl bg-slate-900/40 border border-slate-800/80 grid grid-cols-2 lg:grid-cols-4 gap-6 text-center">
           <div>
             <div className="text-2xl sm:text-3xl font-black text-emerald-400 mb-1">
-              1000+
+              {realPeopleCount > 0 ? `${realPeopleCount} nafar` : "1000+"}
             </div>
             <div className="text-xs text-slate-400 font-medium">
-              Kutilayotgan foydalanuvchilar
+              {realPeopleCount > 0 ? "Shajaradagi a'zolar" : "Kutilayotgan foydalanuvchilar"}
             </div>
           </div>
 
           <div>
             <div className="text-2xl sm:text-3xl font-black text-emerald-400 mb-1">
-              5000+
+              {realGenerationsCount > 0 ? `${realGenerationsCount} pusht` : "7 Ajdod"}
             </div>
             <div className="text-xs text-slate-400 font-medium">
-              Yaratiladigan shajaralar
+              Bog'langan avlodlar zanjiri
             </div>
           </div>
 
           <div>
             <div className="text-2xl sm:text-3xl font-black text-emerald-400 mb-1">
-              20K+
+              {realPhotoCount > 0 ? `${realPhotoCount} ta` : "20K+"}
             </div>
             <div className="text-xs text-slate-400 font-medium">
-              Saqlanadigan suratlar
+              {realPhotoCount > 0 ? "Yuklangan oilaviy suratlar" : "Saqlanadigan suratlar"}
             </div>
           </div>
 
@@ -578,10 +620,10 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 Yordam
               </h5>
               <ul className="space-y-1.5 text-xs text-slate-400">
-                <li><span className="hover:text-white cursor-pointer">Maxfiylik siyosati</span></li>
-                <li><span className="hover:text-white cursor-pointer">Foydalanish shartlari</span></li>
-                <li><span className="hover:text-white cursor-pointer">Ommaviy oferta</span></li>
-                <li><span className="hover:text-white cursor-pointer">Rozilik</span></li>
+                <li><button type="button" onClick={() => onOpenPolicy?.('privacy')} className="hover:text-emerald-400 cursor-pointer transition-colors text-left">Maxfiylik siyosati</button></li>
+                <li><button type="button" onClick={() => onOpenPolicy?.('terms')} className="hover:text-emerald-400 cursor-pointer transition-colors text-left">Foydalanish shartlari</button></li>
+                <li><button type="button" onClick={() => onOpenPolicy?.('offer')} className="hover:text-emerald-400 cursor-pointer transition-colors text-left">Ommaviy oferta</button></li>
+                <li><button type="button" onClick={() => onOpenPolicy?.('consent')} className="hover:text-emerald-400 cursor-pointer transition-colors text-left">Rozilik</button></li>
               </ul>
             </div>
 

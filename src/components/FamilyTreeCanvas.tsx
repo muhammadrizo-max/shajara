@@ -514,20 +514,6 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
             </>
           )}
         </button>
-        {/* Toggle Lifelines ('Umr yo'li') */}
-        <button
-          id="btn-toggle-lifelines"
-          onClick={() => setShowLifelines(!showLifelines)}
-          className={`px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 ${
-            showLifelines
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-          title={showLifelines ? "Umr yo'li chiziqlarini yashirish" : "Umr yo'li chiziqlarini ko'rsatish"}
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="hidden sm:inline">Umr yo'li</span>
-        </button>
       </div>
 
       {/* Canvas Info Badge on Desktop */}

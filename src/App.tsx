@@ -26,6 +26,8 @@ import { InviteFamilyModal } from './components/InviteFamilyModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
 import { GuestLandingView } from './components/GuestLandingView';
 import { FamilyAlbumView } from './components/FamilyAlbumView';
+import { LegalPolicyModal, PolicyType } from './components/LegalPolicyModal';
+import { ThemeMode, getInitialTheme, applyTheme } from './utils/theme';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
 import { syncPersonToSupabase, fetchInviteFromSupabase } from './utils/supabaseDb';
@@ -62,6 +64,10 @@ export default function App() {
   const [targetPersonFromUrl, setTargetPersonFromUrl] = useState<string | null>(null);
 
   // Modals & Drawers
+  const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState<boolean>(false);
+  const [currentPolicyType, setCurrentPolicyType] = useState<PolicyType>('privacy');
+
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => !state.currentUser);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
@@ -76,6 +82,23 @@ export default function App() {
   const [isCalcModalOpen, setIsCalcModalOpen] = useState<boolean>(false);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'warn' } | null>(null);
+
+  // Apply theme class to document
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+    showToast(next === 'dark' ? "Qorong'i rejim (Dark mode) yoqildi 🌙" : "Yorug' rejim (Light mode) yoqildi ☀️");
+  };
+
+  const handleOpenPolicy = (type: PolicyType) => {
+    setCurrentPolicyType(type);
+    setIsPolicyModalOpen(true);
+  };
 
   // Telegram WebApp — avval foydalanuvchi ma'lumotini kutamiz, keyin ishga tushiramiz
   useEffect(() => {
@@ -550,6 +573,8 @@ export default function App() {
         people={state.people}
         meId={state.meId}
         currentUser={state.currentUser}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
         onOpenAddModal={handleOpenAddRoot}
         onOpenCalcModal={() => setIsCalcModalOpen(true)}
@@ -686,10 +711,12 @@ export default function App() {
         {/* Guest Landing / Information View */}
         {viewMode === 'guest' && (
           <GuestLandingView
+            people={state.people}
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
             onOpenTelegramBotModal={() => setIsTelegramBotModalOpen(true)}
             onViewTree={() => setViewMode('tree')}
             onOpenCalcModal={() => setIsCalcModalOpen(true)}
+            onOpenPolicy={handleOpenPolicy}
           />
         )}
       </main>
@@ -791,6 +818,14 @@ export default function App() {
         inviteCode={inviteCodeFromUrl}
         targetPersonId={targetPersonFromUrl}
         onOpenTelegramModal={() => setIsTelegramBotModalOpen(true)}
+        onOpenPolicy={handleOpenPolicy}
+      />
+
+      {/* Huquqiy hujjatlar va siyosatlar modal */}
+      <LegalPolicyModal
+        isOpen={isPolicyModalOpen}
+        onClose={() => setIsPolicyModalOpen(false)}
+        initialPolicy={currentPolicyType}
       />
 
       {/* Suzuvchi dumaloq Telegram Bot tugmasi (ekranning chap pastki burchagida - AI chat uslubida) */}

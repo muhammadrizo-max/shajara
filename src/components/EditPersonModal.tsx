@@ -9,8 +9,11 @@ import {
   Calendar, 
   Image as ImageIcon,
   Camera,
-  AlertCircle
+  AlertCircle,
+  Video,
+  Film
 } from 'lucide-react';
+import { saveMediaFile, deleteMediaFile } from '../utils/mediaStorage';
 import confetti from 'canvas-confetti';
 
 interface EditPersonModalProps {
@@ -73,6 +76,19 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [notes, setNotes] = useState<string>(personToEdit?.notes || '');
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(personToEdit?.photoUrl);
   
+  // Video state (Biografik xotira videosi - 10 daqiqagacha)
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [biographyVideoUrl, setBiographyVideoUrl] = useState<string | undefined>(
+    personToEdit?.biographyVideoUrl
+  );
+  const [biographyMediaId, setBiographyMediaId] = useState<string | undefined>(
+    personToEdit?.biographyMediaId
+  );
+  const [biographyVideoDuration, setBiographyVideoDuration] = useState<number | undefined>(
+    personToEdit?.biographyVideoDuration
+  );
+  const [isVideoUploading, setIsVideoUploading] = useState<boolean>(false);
+
   // Random gradient color selected automatically
   const [avatarColor] = useState<string>(() => {
     if (personToEdit?.avatarColor) return personToEdit.avatarColor;
@@ -105,6 +121,64 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
         setError("Rasmni yuklashda xatolik yuz berdi");
       }
     }
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 300 * 1024 * 1024) {
+      setError("Video hajmi 300MB dan oshmasligi kerak");
+      return;
+    }
+
+    setIsVideoUploading(true);
+    setError('');
+
+    try {
+      const mediaId = biographyMediaId || `bio_vid_${Date.now()}`;
+      const videoEl = document.createElement('video');
+      videoEl.preload = 'metadata';
+      const tempUrl = URL.createObjectURL(file);
+      videoEl.src = tempUrl;
+
+      videoEl.onloadedmetadata = async () => {
+        URL.revokeObjectURL(tempUrl);
+        const duration = Math.round(videoEl.duration);
+
+        if (duration > 600) {
+          setError("Video davomiyligi maksimum 10 daqiqa (600 soniya) bo'lishi kerak");
+          setIsVideoUploading(false);
+          return;
+        }
+
+        const storedUrl = await saveMediaFile(mediaId, file, 'bio-video', duration);
+        setBiographyMediaId(mediaId);
+        setBiographyVideoUrl(storedUrl);
+        setBiographyVideoDuration(duration);
+        setIsVideoUploading(false);
+      };
+
+      videoEl.onerror = async () => {
+        URL.revokeObjectURL(tempUrl);
+        const storedUrl = await saveMediaFile(mediaId, file, 'bio-video');
+        setBiographyMediaId(mediaId);
+        setBiographyVideoUrl(storedUrl);
+        setIsVideoUploading(false);
+      };
+    } catch (err: any) {
+      setError("Videoni saqlashda xatolik yuz berdi");
+      setIsVideoUploading(false);
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    if (biographyMediaId) {
+      await deleteMediaFile(biographyMediaId);
+    }
+    setBiographyVideoUrl(undefined);
+    setBiographyMediaId(undefined);
+    setBiographyVideoDuration(undefined);
   };
 
   const handleCreateInlineFather = (e: React.MouseEvent) => {
@@ -168,6 +242,9 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       location: location.trim() || undefined,
       notes: notes.trim() || undefined,
       photoUrl,
+      biographyVideoUrl,
+      biographyMediaId,
+      biographyVideoDuration,
       avatarColor,
       generation: calculatedGeneration,
     };
@@ -242,8 +319,8 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             </div>
           )}
 
-          {/* 1. Center Avatar & Rasm Yuklash tugmasi (Image 4 talabi) */}
-          <div className="flex flex-col items-center justify-center text-center p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
+          {/* 1. Center Avatar & Rasm Yuklash (Image 4 talabi) */}
+          <div className="flex flex-col items-center justify-center text-center p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-2">
             <input
               ref={photoInputRef}
               type="file"
@@ -253,11 +330,12 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
               id="file-photo-input"
             />
 
-            {/* Avatar Preview Box (Centered) */}
+            {/* Avatar Preview Box (Centered - avatar ustiga bosilganda rasm yuklanadi) */}
             <div className="relative group">
               <div 
                 onClick={() => photoInputRef.current?.click()}
                 className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden cursor-pointer shadow-lg border-2 border-emerald-500 relative flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                title="Avatar ustiga bosib rasm yuklang"
               >
                 {photoUrl ? (
                   <img
@@ -286,7 +364,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                     e.stopPropagation();
                     setPhotoUrl(undefined);
                   }}
-                  className="absolute -top-1 -right-1 p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-md transition-transform hover:scale-110"
+                  className="absolute -top-1 -right-1 p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
                   title="Rasmni o'chirish"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -294,49 +372,12 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
               )}
             </div>
 
-            {/* Rasm yuklash tugmasi markazda profil ostida/ustida */}
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-2 transition active:scale-95 cursor-pointer"
-            >
-              <ImageIcon className="w-4 h-4 text-emerald-600" />
-              <span>{photoUrl ? "Suratni almashtirish" : "Surat yuklash"}</span>
-            </button>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Avatar ustiga bosib fotosurat yuklang yoki almashtiring
+            </p>
           </div>
 
-          {/* 2. Jins tanlash - Markazda (Image 4 & foydalanuvchi talabi) */}
-          <div className="space-y-1.5 text-center">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-              Jinsi
-            </label>
-            <div className="inline-flex p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={() => setGender('male')}
-                className={`py-2 px-5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  gender === 'male'
-                    ? 'bg-sky-500 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <span>♂ Erkak (O'g'il / Ota)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setGender('female')}
-                className={`py-2 px-5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  gender === 'female'
-                    ? 'bg-rose-500 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <span>♀ Ayol (Qiz / Ona)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 3. Ism va Familiya */}
+          {/* 2. Ism va Familiya (Jins tanlashdan avval) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
@@ -366,6 +407,37 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                 placeholder="Masalan: Xudoberdiyev"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
+            </div>
+          </div>
+
+          {/* 3. Jins tanlash - Ism va familiyadan keyin markazda (Foydalanuvchi talabi) */}
+          <div className="space-y-1.5 text-center">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+              Jinsi
+            </label>
+            <div className="inline-flex p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setGender('male')}
+                className={`py-2 px-5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  gender === 'male'
+                    ? 'bg-sky-500 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <span>♂ Erkak (O'g'il / Ota)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGender('female')}
+                className={`py-2 px-5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  gender === 'female'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <span>♀ Ayol (Qiz / Ona)</span>
+              </button>
             </div>
           </div>
 
@@ -456,7 +528,74 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             </div>
           </div>
 
-          {/* 5. Otasi (Parent selector) */}
+          {/* 5. Xotira videosi / Biografik video (10 daqiqagacha) */}
+          <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Video className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Biografik video / Xotira (10 daqiqagacha)</span>
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Max: 10 daqiqa / 300MB
+              </span>
+            </div>
+
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              onChange={handleVideoUpload}
+              className="hidden"
+              id="file-video-input"
+            />
+
+            {biographyVideoUrl ? (
+              <div className="space-y-2">
+                <div className="relative rounded-2xl overflow-hidden bg-black aspect-video max-h-48 flex items-center justify-center">
+                  <video
+                    src={biographyVideoUrl}
+                    controls
+                    className="w-full h-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveVideo}
+                    className="absolute top-2 right-2 p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full shadow-lg transition-transform hover:scale-110 cursor-pointer"
+                    title="Videoni o'chirish"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {biographyVideoDuration && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
+                    <span>Davomiyligi: {Math.floor(biographyVideoDuration / 60)} daq {biographyVideoDuration % 60} soniya</span>
+                    <button
+                      type="button"
+                      onClick={() => videoInputRef.current?.click()}
+                      className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                    >
+                      Boshqa video tanlash
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={isVideoUploading}
+                  className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white/60 dark:bg-slate-800/40 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 text-xs font-bold text-slate-700 dark:text-slate-200 flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Film className="w-5 h-5 text-emerald-600" />
+                  <span>{isVideoUploading ? "Video yuklanmoqda..." : "Shaxsning qisqa video xotirasini yuklash"}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">MP4, MOV, WebM formatlari (10 daqiqagacha)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 6. Otasi (Parent selector) */}
           <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">

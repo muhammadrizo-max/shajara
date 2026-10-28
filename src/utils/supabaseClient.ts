@@ -136,3 +136,71 @@ export function getSavedSupabaseSession(): SupabaseAuthSession | null {
 export function clearSupabaseSession(): void {
   localStorage.removeItem(STORAGE_SESSION_KEY);
 }
+
+/**
+ * Bog'lanish xabarini Supabase contact_messages jadvaliga yozish
+ */
+export async function sendContactMessageToSupabase(payload: {
+  id: string;
+  email: string;
+  message: string;
+  created_at: string;
+}): Promise<boolean> {
+  try {
+    const hasRealCredentials =
+      SUPABASE_URL &&
+      !SUPABASE_URL.includes('your-project') &&
+      SUPABASE_ANON_KEY &&
+      !SUPABASE_ANON_KEY.includes('your-anon');
+
+    if (hasRealCredentials) {
+      const endpoint = `${SUPABASE_URL}/rest/v1/contact_messages`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    }
+    return false;
+  } catch (err) {
+    console.warn("Supabase contact_messages error:", err);
+    return false;
+  }
+}
+
+/**
+ * Yengil Supabase REST mijozi (fallback va to'g'ridan-to'g'ri chaqiruvlar uchun)
+ */
+export const supabase = {
+  from: (table: string) => ({
+    insert: async (data: any[]) => {
+      try {
+        if (
+          SUPABASE_URL &&
+          !SUPABASE_URL.includes('your-project') &&
+          SUPABASE_ANON_KEY &&
+          !SUPABASE_ANON_KEY.includes('your-anon')
+        ) {
+          await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify(data),
+          });
+        }
+      } catch (e) {
+        console.warn(`Supabase ${table} insert error:`, e);
+      }
+      return { data: null, error: null };
+    },
+  }),
+};

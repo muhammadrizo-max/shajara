@@ -24,8 +24,11 @@ import {
   UserPlus,
   Bot,
   Info,
-  Camera
+  Camera,
+  Sun,
+  Moon
 } from 'lucide-react';
+import { ThemeMode } from '../utils/theme';
 
 interface NavbarProps {
   viewMode: ViewMode;
@@ -35,6 +38,8 @@ interface NavbarProps {
   people: Record<string, Person>;
   meId: string;
   currentUser?: AuthUser | null;
+  theme: ThemeMode;
+  onToggleTheme: () => void;
   onOpenLoginModal: () => void;
   onOpenAddModal: () => void;
   onOpenCalcModal: () => void;
@@ -58,6 +63,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   people,
   meId,
   currentUser,
+  theme,
+  onToggleTheme,
   onOpenLoginModal,
   onOpenAddModal,
   onOpenCalcModal,
@@ -88,10 +95,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-sm w-full">
+        <div className="w-full px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 overflow-x-hidden">
           {/* Left: Brand Logo & Title with 1-rasmdagi Oila Daraxti */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-emerald-500/20 via-teal-500/10 to-amber-500/20 border border-emerald-500/30 flex items-center justify-center p-1 shadow-sm flex-shrink-0">
               <FamilyTreeLogo className="w-8 h-8 sm:w-9 sm:h-9" />
             </div>
@@ -163,23 +170,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Camera className="w-3.5 h-3.5 text-rose-500" />
               <span>Oila Albomi</span>
             </button>
-
-            <button
-              id="tab-guest-view"
-              onClick={() => onViewModeChange('guest')}
-              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all ${
-                viewMode === 'guest'
-                  ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Info className="w-3.5 h-3.5" />
-              <span>Mehmon sahifasi</span>
-            </button>
           </div>
 
-          {/* Right: Actions, New Features (Print, History, Invite) & Profile */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Right: Actions, New Features (Print, History, Invite, Theme) & Profile */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Mobile Search Toggle */}
             <button
               onClick={() => setIsMobileSearchOpen((prev) => !prev)}
@@ -204,17 +198,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Taklif qilish</span>
             </button>
 
-            {/* Telegram Bot & WebApp */}
-            <button
-              id="btn-nav-telegram-bot"
-              onClick={onOpenTelegramBotModal}
-              className="flex px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/60 dark:hover:bg-sky-900/60 text-[#24A1DE] dark:text-sky-300 border border-sky-200/80 dark:border-sky-800/60 text-xs font-bold items-center gap-1.5 transition-colors shadow-xs"
-              title="Telegram Bot va WebApp integratsiyasi (@shajarachi_bot)"
-            >
-              <Bot className="w-3.5 h-3.5 text-[#24A1DE]" />
-              <span className="hidden md:inline">Telegram Bot</span>
-            </button>
-
             {/* Desktop: Chop etish uchun versiya (A4 Print / PDF) */}
             <button
               id="btn-nav-print"
@@ -234,6 +217,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Shajara o'zgarishlar tarixi va jurnali"
             >
               <History className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+            </button>
+
+            {/* Theme Toggle (Dark / Light mode) */}
+            <button
+              id="btn-nav-theme-toggle"
+              type="button"
+              onClick={onToggleTheme}
+              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+              title={theme === 'dark' ? "Yorug' rejim (Light mode)" : "Qorong'i rejim (Dark mode)"}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-700 dark:text-slate-200" />
+              )}
             </button>
 
             {/* Active Logged-in Person Box (Desktop) */}
@@ -541,6 +539,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
                     Xizmatlar & Integratsiya
                   </div>
+
+                  <button
+                    onClick={() => onToggleTheme()}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      {theme === 'dark' ? (
+                        <Sun className="w-4 h-4 text-amber-400" />
+                      ) : (
+                        <Moon className="w-4 h-4 text-slate-700" />
+                      )}
+                      <span>Mavzu ko'rinishi</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      {theme === 'dark' ? "Qorong'i (Dark)" : "Yorug' (Light)"}
+                    </span>
+                  </button>
 
                   <button
                     onClick={() => {
