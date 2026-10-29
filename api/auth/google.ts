@@ -89,13 +89,14 @@ export default async function handler(req: any, res: any) {
   try {
     const body = await parseJsonBody(req);
     const credential = body.credential || body.token || body.id_token;
+    const directUser = body.user || body.profile;
 
-    if (!credential) {
+    if (!credential && (!directUser || !directUser.email)) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         success: false, 
-        error: 'Google JWT tokeni (credential) taqdim etilmadi' 
+        error: 'Google JWT tokeni (credential) yoki foydalanuvchi ma\'lumotlari taqdim etilmadi' 
       }));
       return;
     }
@@ -105,43 +106,60 @@ export default async function handler(req: any, res: any) {
       process.env.VITE_GOOGLE_CLIENT_ID || 
       DEFAULT_GOOGLE_CLIENT_ID;
 
-    // 1. Google OAuth2Client orqali tokenni xavfsiz tekshirish
-    const client = new OAuth2Client(clientId);
-    let googlePayload: any = null;
+    let googleId = '';
+    let email = '';
+    let fullName = '';
+    let photoUrl: string | null = null;
+    let givenName = '';
+    let familyName = '';
 
-    try {
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: clientId,
-      });
-      googlePayload = ticket.getPayload();
-    } catch (verifyErr: any) {
-      console.error("[Google Auth Backend] Token tekshirish xatosi:", verifyErr?.message || verifyErr);
-      res.statusCode = 401;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ 
-        success: false, 
-        error: 'Google tokeni haqiqiy emas yoki muddati o\'tgan: ' + (verifyErr?.message || '') 
-      }));
-      return;
+    // 1. Agar credential (JWT) berilgan bo'lsa, OAuth2Client orqali tokenni xavfsiz tekshirish
+    if (credential) {
+      const client = new OAuth2Client(clientId);
+      let googlePayload: any = null;
+
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: credential,
+          audience: clientId,
+        });
+        googlePayload = ticket.getPayload();
+      } catch (verifyErr: any) {
+        console.error("[Google Auth Backend] Token tekshirish xatosi:", verifyErr?.message || verifyErr);
+        res.statusCode = 401;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: 'Google tokeni haqiqiy emas yoki muddati o\'tgan: ' + (verifyErr?.message || '') 
+        }));
+        return;
+      }
+
+      if (!googlePayload || !googlePayload.email) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: 'Google tokenidan foydalanuvchi ma\'lumotlarini o\'qib bo\'lmadi' 
+        }));
+        return;
+      }
+
+      googleId = googlePayload.sub;
+      email = googlePayload.email;
+      fullName = googlePayload.name || email.split('@')[0];
+      photoUrl = googlePayload.picture || null;
+      givenName = googlePayload.given_name || fullName.split(' ')[0] || '';
+      familyName = googlePayload.family_name || fullName.split(' ').slice(1).join(' ') || '';
+    } else {
+      // Direct user profile from Google UserInfo
+      googleId = directUser.googleId || directUser.id?.replace(/^google_/, '') || `g_${Date.now()}`;
+      email = directUser.email;
+      fullName = directUser.fullName || directUser.name || email.split('@')[0];
+      photoUrl = directUser.photoUrl || directUser.picture || null;
+      givenName = directUser.name || fullName.split(' ')[0] || '';
+      familyName = directUser.surname || fullName.split(' ').slice(1).join(' ') || '';
     }
-
-    if (!googlePayload || !googlePayload.email) {
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ 
-        success: false, 
-        error: 'Google tokenidan foydalanuvchi ma\'lumotlarini o\'qib bo\'lmadi' 
-      }));
-      return;
-    }
-
-    const googleId = googlePayload.sub;
-    const email = googlePayload.email;
-    const fullName = googlePayload.name || email.split('@')[0];
-    const photoUrl = googlePayload.picture || null;
-    const givenName = googlePayload.given_name || fullName.split(' ')[0] || '';
-    const familyName = googlePayload.family_name || fullName.split(' ').slice(1).join(' ') || '';
 
     // 2. Supabase PostgreSQL bazasi bilan ishlash
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

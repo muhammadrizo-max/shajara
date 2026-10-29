@@ -23,11 +23,13 @@ import {
   AlertCircle, 
   X, 
   UserPlus, 
-  ShieldCheck,
-  Bot
+  Bot,
 } from 'lucide-react';
-import { GoogleAccountChooserModal } from './GoogleAccountChooserModal';
-import { initializeGoogleAuth, sendGoogleCredentialToBackend, isRunningInIframe } from '../utils/googleAuth';
+import { 
+  signInWithGooglePopup, 
+  syncGoogleUserWithBackend, 
+  GoogleAuthCancelledError 
+} from '../utils/googleAuth';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -53,9 +55,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   // Ilk marta kelgan foydalanuvchilar uchun boshlang'ich tab HAR DOIM 'register' (Ro'yxatdan o'tish)
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   
-  // Google Account Chooser modal state (2-rasm)
-  const [isGoogleChooserOpen, setIsGoogleChooserOpen] = useState<boolean>(false);
-
   // Register state
   const [regFullName, setRegFullName] = useState<string>('');
   const [regGender, setRegGender] = useState<Gender>('male');
@@ -79,27 +78,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setRegPersonId(targetPersonId);
     }
   }, [targetPersonId]);
-
-  // Google GIS SDK ni avtomatik tinglash va tayyorlash (faqat iframe bo'lmaganda)
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !isRunningInIframe()) {
-      const initGis = () => {
-        if (window.google?.accounts?.id) {
-          initializeGoogleAuth((credential) => {
-            handleGoogleCredentialSuccess(credential);
-          });
-        }
-      };
-      initGis();
-      const interval = setInterval(() => {
-        if (window.google?.accounts?.id) {
-          initGis();
-          clearInterval(interval);
-        }
-      }, 500);
-      return () => clearInterval(interval);
-    }
-  }, []);
 
   if (!isOpen) return null;
 
@@ -167,85 +145,43 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     onLogin(authUser, { gender: regGender });
   };
 
-  // Google JWT tokenni backend (/api/auth/google) orqali tekshirish va Supabase'ga saqlash
-  const handleGoogleCredentialSuccess = async (credential: string) => {
-    setIsGoogleLoading(true);
+  const handleGoogleLogin = async () => {
     setError('');
+    setIsGoogleLoading(true);
     try {
-      const res = await sendGoogleCredentialToBackend(credential);
-      if (res.success && res.user) {
-        addHistoryRecord({
-          action: 'user_registered',
-          actorName: res.user.fullName || res.user.name,
-          title: "Google orqali tizimga kirildi",
-          description: `${res.user.fullName} (${res.user.email}) Google hisobi orqali tizimga kirdi.`,
-          details: `Email: ${res.user.email}`
-        });
-
-        setCurrentSessionUser(res.user);
-        onLogin(res.user, { gender: regGender });
-      } else {
-        setError(res.error || "Google orqali kirishda xatolik yuz berdi");
+      const authUser = await signInWithGooglePopup();
+      
+      // Supabase / backend bilan sinxronlash
+      try {
+        const synced = await syncGoogleUserWithBackend(authUser);
+        if (synced?.user) {
+          Object.assign(authUser, synced.user);
+        }
+      } catch (syncErr) {
+        console.warn("[Google Auth] Backend sync e'tiborga olinmadi:", syncErr);
       }
+
+      setCurrentSessionUser(authUser);
+      onLogin(authUser, { gender: regGender });
     } catch (err: any) {
-      setError(err?.message || "Google tizimiga ulanishda kutilmagan xatolik");
+      const isCancelled = 
+        err instanceof GoogleAuthCancelledError ||
+        err?.code === 'POPUP_CLOSED' || 
+        err?.isCancelled ||
+        err?.message?.includes('Popup window closed') || 
+        err?.message?.includes('popup_closed') ||
+        err?.message?.includes('bekor qilindi');
+
+      if (isCancelled) {
+        console.info("[Google Auth] Foydalanuvchi hisob tanlash oynasini yopdi.");
+        setError("Google hisobini tanlash bekor qilindi.");
+      } else {
+        console.warn("[Google Auth] Kirish to'xtatildi:", err?.message || err);
+        setError(err?.message || "Google tizimiga ulanishda xatolik yuz berdi");
+      }
     } finally {
       setIsGoogleLoading(false);
     }
-  };
-
-  const handleGoogleLogin = () => {
-    setError('');
-    // Iframe ichida bo'lsa (AI Studio preview yoki sandbox), FedCM ruxsatnoma cheklovlariga uchramasligi uchun
-    // to'g'ridan-to'g'ri qulay Google hisob tanlash modalini ochamiz.
-    if (isRunningInIframe()) {
-      setIsGoogleChooserOpen(true);
-      return;
-    }
-
-    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-      initializeGoogleAuth((cred) => {
-        handleGoogleCredentialSuccess(cred);
-      });
-      try {
-        window.google.accounts.id.prompt((notification: any) => {
-          if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
-            setIsGoogleChooserOpen(true);
-          }
-        });
-      } catch {
-        setIsGoogleChooserOpen(true);
-      }
-    } else {
-      setIsGoogleChooserOpen(true);
-    }
-  };
-
-  const handleSelectGoogleAccount = (acc: { name: string; email: string }) => {
-    setIsGoogleChooserOpen(false);
-    setError('');
-    const parts = acc.name.trim().split(' ');
-    const authUser: AuthUser = {
-      id: `google_${Date.now()}`,
-      name: parts[0] || acc.name,
-      surname: parts.slice(1).join(' ') || undefined,
-      fullName: acc.name,
-      email: acc.email,
-      role: isTreeEmpty ? 'owner' : 'editor',
-      isGuest: false,
-      authProvider: 'google',
-    };
-
-    addHistoryRecord({
-      action: 'user_registered',
-      actorName: authUser.fullName || authUser.name,
-      title: "Google orqali tizimga kirildi",
-      description: `${authUser.fullName} (${acc.email}) Google hisobi orqali tizimga kirdi.`,
-      details: `Email: ${authUser.email}`
-    });
-
-    setCurrentSessionUser(authUser);
-    onLogin(authUser, { gender: regGender });
   };
 
   // Kirish
@@ -633,14 +569,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
       </div>
-
-      {/* Google Account Chooser Modal (2-rasmdagi rasmiy hisob tanlash) */}
-      <GoogleAccountChooserModal
-        isOpen={isGoogleChooserOpen}
-        onClose={() => setIsGoogleChooserOpen(false)}
-        onSelectAccount={handleSelectGoogleAccount}
-        onOpenPolicy={onOpenPolicy ? (t) => onOpenPolicy(t === 'terms' ? 'terms' : 'privacy') : undefined}
-      />
     </div>
   );
 };

@@ -1,42 +1,47 @@
 import { FamilyTreeState, Person } from '../types';
 import { DEFAULT_ME_ID, DEFAULT_ROOT_ID, INITIAL_PEOPLE } from '../data/initialData';
 
-const STORAGE_KEY = 'shajara_clean_user_tree_v3';
+export function getUserTreeStorageKey(userId?: string | null): string {
+  if (!userId) return 'shajara_guest_tree_v3';
+  return `shajara_tree_user_${userId}`;
+}
 
-export function loadFamilyTreeState(): FamilyTreeState {
+export function loadFamilyTreeState(userId?: string | null): FamilyTreeState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getUserTreeStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.people && Object.keys(parsed.people).length > 0) {
+      if (parsed && parsed.people) {
         return {
           people: parsed.people,
-          rootId: parsed.rootId || Object.keys(parsed.people)[0] || '',
-          meId: parsed.meId || Object.keys(parsed.people)[0] || '',
+          rootId: parsed.rootId || '',
+          meId: parsed.meId || '',
           currentUser: parsed.currentUser || null,
           activePerspectiveId: parsed.activePerspectiveId || undefined,
         };
       }
     }
   } catch (err) {
-    console.error('Failed to load shajara state from localStorage:', err);
+    console.error('Failed to load user shajara state:', err);
   }
 
-  // Butunlay toza bo'sh shajara (hech qanday default odamlar qolmagan)
   return {
-    people: INITIAL_PEOPLE, // {}
-    rootId: DEFAULT_ROOT_ID, // ''
-    meId: DEFAULT_ME_ID, // ''
+    people: {},
+    rootId: '',
+    meId: '',
     currentUser: null,
     activePerspectiveId: undefined,
   };
 }
 
-export function saveFamilyTreeState(state: FamilyTreeState): void {
+export function saveFamilyTreeState(state: FamilyTreeState, userId?: string | null): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const targetUserId = userId || state.currentUser?.id;
+    const key = getUserTreeStorageKey(targetUserId);
+    localStorage.setItem(key, JSON.stringify(state));
   } catch (err) {
-    console.error('Failed to save shajara state to localStorage:', err);
+    console.error('Failed to save user shajara state:', err);
   }
 }
 

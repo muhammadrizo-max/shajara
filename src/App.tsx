@@ -50,16 +50,16 @@ import {
 
 export default function App() {
   const [state, setState] = useState<FamilyTreeState>(() => {
-    const loaded = loadFamilyTreeState();
     const session = getCurrentSessionUser();
-    if (session) {
+    if (session?.id) {
+      const loaded = loadFamilyTreeState(session.id);
       return {
         ...loaded,
         currentUser: session,
         meId: session.personId && loaded.people[session.personId] ? session.personId : loaded.meId
       };
     }
-    return loaded;
+    return loadFamilyTreeState(null);
   });
 
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
@@ -121,13 +121,15 @@ export default function App() {
   const handleConfirmLogout = () => {
     setCurrentSessionUser(null);
     clearSupabaseSession();
-    setState((prev) => ({
-      ...prev,
+    setState({
+      people: {},
+      rootId: '',
+      meId: '',
       currentUser: null,
       activePerspectiveId: undefined,
-    }));
+    });
     setViewMode('guest');
-    showToast("Hisobdan muvaffaqiyatli chiqildi. Mehmon sahifasiga qaytdingiz.");
+    showToast("Hisobdan chiqildi.");
   };
 
   // Telegram WebApp — avval foydalanuvchi ma'lumotini kutamiz, keyin ishga tushiramiz
@@ -240,9 +242,11 @@ export default function App() {
     }
   }, []);
 
-  // Save to localStorage on state change
+  // Save to localStorage on state change per user
   useEffect(() => {
-    saveFamilyTreeState(state);
+    if (state.currentUser?.id) {
+      saveFamilyTreeState(state, state.currentUser.id);
+    }
   }, [state]);
 
   // Hydrate video & media URLs from IndexedDB on startup
@@ -292,10 +296,34 @@ export default function App() {
   };
 
   // Login handler
-  // Login handler
-  const handleLogin = (user: AuthUser, initialPersonData?: { gender: Gender }) => {
-    // Agar shajara bo'sh bo'lsa, yangi ro'yxatdan o'tgan foydalanuvchi o'zi birinchi a'zo (egasi) sifatida yaratiladi
-    if (Object.keys(state.people).length === 0) {
+  const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender }) => {
+    let userTree: FamilyTreeState | null = null;
+
+    // 1. Agar Supabase ulangan bo'lsa va foydalanuvchida familyId bo'lsa: loadFamilyDataFromSupabase(user.familyId) orqali yuklang
+    if (user.familyId) {
+      try {
+        const sbRes = await loadFamilyDataFromSupabase(user.familyId);
+        if (sbRes.success && sbRes.people && Object.keys(sbRes.people).length > 0) {
+          userTree = {
+            people: sbRes.people,
+            rootId: sbRes.rootId || Object.keys(sbRes.people)[0] || '',
+            meId: sbRes.meId || (user.personId && sbRes.people[user.personId] ? user.personId : Object.keys(sbRes.people)[0] || ''),
+            currentUser: user,
+            activePerspectiveId: undefined,
+          };
+        }
+      } catch (err) {
+        console.warn("Supabase oila yuklanmadi, lokal yuklanadi:", err);
+      }
+    }
+
+    // 2. Aks holda lokal xotiradan: loadFamilyTreeState(user.id) orqali yuklang
+    if (!userTree) {
+      userTree = loadFamilyTreeState(user.id);
+    }
+
+    // 3. Agar foydalanuvchining shajarasi bo'sh bo'lsa (Object.keys(loadedTree.people).length === 0), foydalanuvchining o'zini birinchi tugun (Root Person - Shajara Egasi) qilib yarating va saqlang:
+    if (Object.keys(userTree.people).length === 0) {
       const newPersonId = `p_${Date.now()}`;
       const newPerson: Person = {
         id: newPersonId,
@@ -303,30 +331,25 @@ export default function App() {
         surname: user.surname,
         gender: initialPersonData?.gender || 'male',
         parentId: null,
-        birthDate: user.birthDate,
-        birthYear: user.birthDate ? user.birthDate.slice(0, 4) : undefined,
         generation: 1,
         isAlive: true,
         occupation: "Oila boshlig'i (Shajara egasi)",
         avatarColor: initialPersonData?.gender === 'female' ? 'from-rose-500 to-pink-700' : 'from-emerald-600 to-teal-800',
-        notes: "Ushbu shajara daraxtining egasi va asoschisi.",
+        notes: "Shajara asoschisi",
       };
 
-      const updatedUser: AuthUser = {
-        ...user,
-        personId: newPersonId,
-        role: 'owner',
-      };
+      const updatedUser: AuthUser = { ...user, personId: newPersonId, role: 'owner' as const };
       setCurrentSessionUser(updatedUser);
 
-      setState((prev) => ({
-        ...prev,
+      const newState: FamilyTreeState = {
         people: { [newPersonId]: newPerson },
         rootId: newPersonId,
         meId: newPersonId,
         currentUser: updatedUser,
         activePerspectiveId: undefined,
-      }));
+      };
+      setState(newState);
+      saveFamilyTreeState(newState, user.id);
 
       addHistoryRecord({
         action: 'person_add',
@@ -339,27 +362,22 @@ export default function App() {
 
       setSelectedPerson(newPerson);
       showToast(`Tabriklaymiz, ${user.name}! Shajarangiz yaratildi.`);
-      setIsLoginModalOpen(false);
-      return;
-    }
-
-    if (user.personId && state.people[user.personId]) {
-      setState((prev) => ({
-        ...prev,
-        currentUser: user,
-        meId: user.personId!,
-        activePerspectiveId: undefined,
-      }));
-      setSelectedPerson(state.people[user.personId]);
-      showToast(`Xush kelibsiz, ${user.name}! Sizning shajaradagi o'rningiz ko'rsatildi.`);
     } else {
-      setState((prev) => ({
-        ...prev,
-        currentUser: user,
-        activePerspectiveId: undefined,
-      }));
+      const updatedUser: AuthUser = {
+        ...user,
+        personId: user.personId || userTree.meId || undefined,
+      };
+      setCurrentSessionUser(updatedUser);
+
+      const newState: FamilyTreeState = {
+        ...userTree,
+        currentUser: updatedUser,
+      };
+      setState(newState);
+      saveFamilyTreeState(newState, user.id);
       showToast(`Xush kelibsiz, ${user.name}!`);
     }
+
     setViewMode('tree');
     setIsLoginModalOpen(false);
   };

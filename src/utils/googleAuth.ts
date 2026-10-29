@@ -46,6 +46,17 @@ declare global {
           prompt: (momentListener?: (notification: any) => void) => void;
           disableAutoSelect: () => void;
         };
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            prompt?: string;
+            callback: (tokenResponse: any) => void;
+            error_callback?: (nonOAuthError: any) => void;
+          }) => {
+            requestAccessToken: (overrideConfig?: any) => void;
+          };
+        };
       };
     };
   }
@@ -243,3 +254,138 @@ export async function sendGoogleCredentialToBackend(
     return { success: false, error: err?.message || 'Tarmoq xatosi' };
   }
 }
+
+export class GoogleAuthCancelledError extends Error {
+  code = 'POPUP_CLOSED';
+  isCancelled = true;
+  constructor(message = "Google hisobini tanlash bekor qilindi") {
+    super(message);
+    this.name = 'GoogleAuthCancelledError';
+  }
+}
+
+/**
+ * Google foydalanuvchisini /api/auth/google backend va Supabase bilan sinxronizatsiya qilish
+ */
+export async function syncGoogleUserWithBackend(
+  authUser: AuthUser
+): Promise<GoogleAuthResponse> {
+  try {
+    const response = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user: authUser }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      return { success: false, error: errData.error || 'Serverga yuborishda xatolik' };
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      user: data.user || authUser,
+      token: data.session?.token,
+      isNewUser: data.isNewUser,
+    };
+  } catch (err: any) {
+    console.warn("[Google Auth] Backend sync ulanmadi (lokal sessiya davom etadi):", err?.message || err);
+    return { success: true, user: authUser };
+  }
+}
+
+/**
+ * Google Identity Services (GIS) OAuth2 Popup orqali hisob tanlash va kirish
+ * Har bir foydalanuvchiga brauzerdagi haqiqiy Google hisoblari ro'yxatini chiqaradi
+ */
+export function signInWithGooglePopup(): Promise<AuthUser> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      return reject(new Error("Brauzer muhiti topilmadi"));
+    }
+
+    // Google GIS OAuth2 mijozining yuklanganligini tekshirish
+    if (!window.google?.accounts?.oauth2) {
+      return reject(
+        new Error("Google Identity xizmati hali yuklanmadi. Iltimos, sahifani yangilang yoki bir necha soniyadan so'ng qayta bosing.")
+      );
+    }
+
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid',
+        prompt: 'select_account', // Har bir userga o'z Google hisobini tanlash oynasini chiqaradi
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse?.error) {
+            return reject(new Error(tokenResponse.error_description || tokenResponse.error));
+          }
+
+          try {
+            // Google'ning rasmiy UserInfo endpointidan haqiqiy foydalanuvchi ma'lumotlarini olish
+            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: {
+                Authorization: `Bearer ${tokenResponse.access_token}`,
+              },
+            });
+
+            if (!res.ok) {
+              throw new Error("Google profil ma'lumotlarini olishda xatolik yuz berdi");
+            }
+
+            const profile = await res.json();
+            const parts = (profile.name || '').trim().split(' ');
+
+            const authUser: AuthUser = {
+              id: `google_${profile.sub}`,
+              name: profile.given_name || parts[0] || 'Foydalanuvchi',
+              surname: profile.family_name || parts.slice(1).join(' ') || undefined,
+              fullName: profile.name || profile.email,
+              email: profile.email,
+              photoUrl: profile.picture || undefined,
+              role: 'owner',
+              isGuest: false,
+              authProvider: 'google',
+              googleId: profile.sub,
+            };
+
+            resolve(authUser);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        error_callback: (nonOAuthError: any) => {
+          const type = nonOAuthError?.type;
+          const msg = nonOAuthError?.message || '';
+          const isClosed = 
+            type === 'popup_closed' || 
+            msg.includes('Popup window closed') || 
+            msg.includes('popup_closed');
+          const isBlocked = 
+            type === 'popup_failed_to_open';
+
+          if (isClosed) {
+            reject(new GoogleAuthCancelledError());
+          } else if (isBlocked) {
+            const err = new Error("Brauzeringizda qalqib chiquvchi oyna (popup) bloklandi. Iltimos, brauzer qatorida ruxsat bering.");
+            (err as any).code = 'POPUP_BLOCKED';
+            reject(err);
+          } else {
+            const err = new Error(msg || "Google tizimiga ulanish bekor qilindi");
+            (err as any).code = 'AUTH_FAILED';
+            reject(err);
+          }
+        },
+      });
+
+      // Foydalanuvchi bosishi (user gesture) bilan bir vaqtda to'g'ridan-to'g'ri chaqirish
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    } catch (err: any) {
+      reject(err);
+    }
+  });
+}
+
