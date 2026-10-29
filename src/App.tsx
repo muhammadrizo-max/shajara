@@ -64,6 +64,7 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
 
   // URL query params for Invite links
   const [inviteCodeFromUrl, setInviteCodeFromUrl] = useState<string | null>(null);
@@ -205,6 +206,7 @@ export default function App() {
         setInviteCodeFromUrl(token);
         if (pId) setTargetPersonFromUrl(pId);
 
+        setIsDataLoading(true);
         fetchInviteFromSupabase(token).then(async (inviteData) => {
           if (inviteData) {
             if (inviteData.targetPersonId) {
@@ -235,6 +237,8 @@ export default function App() {
           }
         }).catch((err) => {
           console.warn("Could not fetch invite_tokens data:", err);
+        }).finally(() => {
+          setIsDataLoading(false);
         });
       }
     } catch (e) {
@@ -745,6 +749,7 @@ export default function App() {
               meId={state.meId}
               activePerspectiveId={state.activePerspectiveId}
               currentUser={state.currentUser}
+              isLoading={isDataLoading}
               searchQuery={searchQuery}
               selectedPersonId={selectedPerson?.id || null}
               onSelectPerson={(p) => setSelectedPerson(p)}
@@ -824,13 +829,14 @@ export default function App() {
       </main>
 
       {/* Person Detail Drawer */}
-      {selectedPerson && (
+      {(selectedPerson || isDataLoading) && (
         <PersonDetailDrawer
           person={selectedPerson}
           people={state.people}
           meId={state.meId}
           activePerspectiveId={state.activePerspectiveId}
           currentUser={state.currentUser}
+          isLoading={isDataLoading}
           onClose={() => setSelectedPerson(null)}
           onSelectPerson={(p) => setSelectedPerson(p)}
           onEditPerson={handleEditPerson}

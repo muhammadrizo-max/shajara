@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthUser, Gender, Person, RegisteredAccount } from '../types';
 import { 
   registerNewUser, 
@@ -21,6 +21,9 @@ import {
   ArrowRight, 
   CheckCircle2, 
   AlertCircle, 
+  AlertTriangle,
+  Copy,
+  Check,
   X, 
   UserPlus, 
   Bot,
@@ -70,6 +73,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
+  const [googleFallbackInfo, setGoogleFallbackInfo] = useState<{
+    type: 'origin_mismatch' | 'popup_blocked' | 'sdk_failed' | 'timeout' | 'other';
+    title: string;
+    message: string;
+    domain?: string;
+  } | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
+  const googleLoadingTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (googleLoadingTimeoutRef.current) {
+        clearTimeout(googleLoadingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const [error, setError] = useState<string>('');
 
@@ -147,7 +166,32 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const handleGoogleLogin = async () => {
     setError('');
+    setGoogleFallbackInfo(null);
     setIsGoogleLoading(true);
+
+    // Safeguard: Foydalanuvchi hech qachon loading holatida qotib qolmasligini kafolatlaymiz
+    if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
+    googleLoadingTimeoutRef.current = setTimeout(() => {
+      setIsGoogleLoading(false);
+      setGoogleFallbackInfo({
+        type: 'timeout',
+        title: "Google avtorizatsiya oynasi javob bermadi",
+        message: "Google avtorizatsiya oynasi o'z vaqtida yakunlanmadi yoki brauzer qalqib chiquvchi oynani to'xtatdi. Iltimos, brauzerda popuplarga ruxsat bering yoki email/parol orqali kiring.",
+      });
+    }, 14000);
+
+    // Agar Google Identity SDK umuman yuklanmagan bo'lsa
+    if (typeof window !== 'undefined' && !window.google?.accounts?.oauth2) {
+      if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
+      setIsGoogleLoading(false);
+      setGoogleFallbackInfo({
+        type: 'sdk_failed',
+        title: "Google Identity xizmati yuklanmadi",
+        message: "Brauzerda reklama to'suvchi (AdBlock, Brave Shields) yoqilgan bo'lishi yoki internet uzilgan bo'lishi mumkin. Sahifani yangilang yoki parolingiz orqali kiring.",
+      });
+      return;
+    }
+
     try {
       const authUser = await signInWithGooglePopup();
       
@@ -164,22 +208,54 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setCurrentSessionUser(authUser);
       onLogin(authUser, { gender: regGender });
     } catch (err: any) {
+      const errMsg = err?.message || '';
+      const errCode = err?.code;
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const isKnownOrigin = currentOrigin.includes('shajarachi.vercel.app') || currentOrigin.includes('shajarachi.uz');
+
+      const isPopupBlocked = 
+        errCode === 'POPUP_BLOCKED' || 
+        errMsg.includes('popup_failed_to_open') || 
+        errMsg.includes('bloklandi');
+
       const isCancelled = 
         err instanceof GoogleAuthCancelledError ||
-        err?.code === 'POPUP_CLOSED' || 
+        errCode === 'POPUP_CLOSED' || 
         err?.isCancelled ||
-        err?.message?.includes('Popup window closed') || 
-        err?.message?.includes('popup_closed') ||
-        err?.message?.includes('bekor qilindi');
+        errMsg.includes('Popup window closed') || 
+        errMsg.includes('popup_closed') ||
+        errMsg.includes('bekor qilindi');
 
-      if (isCancelled) {
-        console.info("[Google Auth] Foydalanuvchi hisob tanlash oynasini yopdi.");
-        setError("Google hisobini tanlash bekor qilindi.");
+      if (isPopupBlocked) {
+        setGoogleFallbackInfo({
+          type: 'popup_blocked',
+          title: "Qalqib chiquvchi oyna (popup) bloklandi",
+          message: "Brauzeringiz Google oynasini avtomatik to'xtatdi. Brauzer qidiruv qatoridagi popup belgisini bosib, «Ruxsat berish» (Always allow)ni tanlang yoki boshqa usul bilan kiring.",
+        });
+      } else if (isCancelled) {
+        // Agar ilova Google Cloud Console'da ro'yxatdan o'tmagan sinov domenida ochilgan bo'lsa
+        // Google oynasida 400: origin_mismatch xatosi chiqqan bo'ladi
+        if (!isKnownOrigin) {
+          setGoogleFallbackInfo({
+            type: 'origin_mismatch',
+            title: "Google OAuth: Domen ruxsati zarur (origin_mismatch)",
+            message: `Google Cloud Console xavfsizlik siyosati bo'yicha ushbu sinov domeni («${currentOrigin}») Google Client ID ning «Authorized JavaScript origins» ro'yxatiga kiritilishi zarur. Saytning asosiy domeni https://shajarachi.vercel.app da esa bu to'liq tasdiqlangan.`,
+            domain: currentOrigin,
+          });
+        } else {
+          setError("Google hisobini tanlash bekor qilindi.");
+        }
       } else {
-        console.warn("[Google Auth] Kirish to'xtatildi:", err?.message || err);
-        setError(err?.message || "Google tizimiga ulanishda xatolik yuz berdi");
+        setGoogleFallbackInfo({
+          type: 'other',
+          title: "Google orqali kirish amalga oshmadi",
+          message: errMsg || "Google Identity xizmatiga ulanib bo'lmadi. Email/Parol yoki Telegram orqali kirishingiz mumkin.",
+        });
       }
     } finally {
+      if (googleLoadingTimeoutRef.current) {
+        clearTimeout(googleLoadingTimeoutRef.current);
+      }
       setIsGoogleLoading(false);
     }
   };
@@ -564,6 +640,86 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <span>Telegram bot orqali</span>
               </button>
             </div>
+
+            {/* Fallback UI: Google SDK xatosi, Origin mismatch yoki Popup bloklanganda tushunarli ko'rsatma */}
+            {googleFallbackInfo && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-slate-800 dark:text-slate-200 space-y-2.5 animate-in fade-in slide-in-from-top-1 text-left">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{googleFallbackInfo.title}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGoogleFallbackInfo(null)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                    title="Yopish"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                  {googleFallbackInfo.message}
+                </p>
+
+                {googleFallbackInfo.domain && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Google Cloud Console'ga qo'shiladigan URL:
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 rounded-xl p-1.5 px-2.5">
+                      <code className="text-[11px] font-mono text-amber-800 dark:text-amber-300 truncate flex-1 select-all">
+                        {googleFallbackInfo.domain}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (googleFallbackInfo.domain) {
+                            navigator.clipboard.writeText(googleFallbackInfo.domain);
+                            setCopiedDomain(true);
+                            setTimeout(() => setCopiedDomain(false), 2000);
+                          }
+                        }}
+                        className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/50 dark:hover:bg-amber-800/60 text-amber-900 dark:text-amber-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shrink-0"
+                      >
+                        {copiedDomain ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>Nusxa olindi!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Nusxa olish</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-1 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGoogleFallbackInfo(null);
+                      setActiveTab('login');
+                    }}
+                    className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    Email va parol bilan kirish →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGoogleLogin()}
+                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer"
+                  >
+                    Qayta urinish
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
