@@ -6,22 +6,25 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. FOYDALANUVCHILAR JADVALI (users)
--- Telegram va Web orqali ro'yxatdan o'tganlar uchun
+-- Google, Telegram va Web orqali ro'yxatdan o'tganlar uchun
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    google_id TEXT UNIQUE,
     telegram_id BIGINT UNIQUE,
     full_name TEXT NOT NULL,
     username TEXT,
     phone TEXT,
-    email TEXT,
+    email TEXT UNIQUE,
     photo_url TEXT,
     birth_date DATE,
-    role TEXT DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'editor', 'viewer', 'member')),
+    role TEXT DEFAULT 'owner' CHECK (role IN ('owner', 'admin', 'editor', 'viewer', 'member')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     last_login TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
 -- Indekslar
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON public.users(google_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON public.users(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone);
 

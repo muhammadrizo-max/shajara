@@ -184,10 +184,14 @@ export function getCurrentSessionUser(): AuthUser | null {
   }
 }
 
-export function setCurrentSessionUser(account: RegisteredAccount | AuthUser): void {
+export function setCurrentSessionUser(account: RegisteredAccount | AuthUser | null | undefined): void {
   try {
+    if (!account) {
+      localStorage.removeItem(STORAGE_KEY_CURRENT_USER);
+      return;
+    }
     let authUser: AuthUser;
-    if ('passwordHash' in account) {
+    if (typeof account === 'object' && 'passwordHash' in account) {
       const parts = account.fullName.split(' ');
       authUser = {
         id: account.id,

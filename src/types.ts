@@ -43,11 +43,13 @@ export interface AuthUser {
   familyId?: string; // Supabase families.id
   isGuest?: boolean;
   role?: 'owner' | 'editor' | 'viewer';
-  // Telegram integratsiya parametrlari
+  // Google va Telegram integratsiya parametrlari
+  googleId?: string;
+  photoUrl?: string;
   telegramId?: string | number;
   telegramUsername?: string;
   telegramPhotoUrl?: string;
-  authProvider?: 'credentials' | 'telegram' | 'guest';
+  authProvider?: 'credentials' | 'telegram' | 'google' | 'guest';
 }
 
 export interface RegisteredAccount {

@@ -70,15 +70,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   const me = people[meId];
   const peopleList = Object.values(people);
 
-  // Close dropdown on click outside
+  // Close dropdown on click/touch outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsToolsDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs w-full transition-colors">
-        <div className="w-full px-2.5 sm:px-5 py-2 flex items-center justify-between gap-2 overflow-x-hidden">
+        <div className="w-full px-2.5 sm:px-5 py-2 flex items-center justify-between gap-2 relative">
           
           {/* Left: Interactive Logo (Opens Left Sidebar) & Title + Subtitle */}
           <div className="flex items-center gap-2.5 shrink-0 min-w-0">
@@ -180,44 +184,38 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Right: + Qo'shish, Tools Dropdown, User Profile (Opens Right Sidebar), and Logout Icon */}
+          {/* Right: Tools Dropdown, User Profile (Opens Right Sidebar), and Logout Icon */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             
-            {/* Quick Add Button */}
-            <button
-              id="btn-nav-add-quick"
-              onClick={onOpenAddModal}
-              className="px-3 sm:px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
-              title="Yangi shaxs / Farzand qo'shish"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Qo'shish</span>
-            </button>
-
-            {/* Compact Tools / Settings Dropdown (Hover & Click) */}
+            {/* Compact Tools / Settings Dropdown (Click & Touch Toggle) */}
             <div 
               ref={dropdownRef}
               className="relative"
-              onMouseEnter={() => setIsToolsDropdownOpen(true)}
-              onMouseLeave={() => setIsToolsDropdownOpen(false)}
             >
               <button
                 id="btn-nav-tools-menu"
                 type="button"
-                onClick={() => setIsToolsDropdownOpen((prev) => !prev)}
-                className={`p-2 rounded-xl text-slate-700 dark:text-slate-200 border transition-colors flex items-center justify-center cursor-pointer ${
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsToolsDropdownOpen((prev) => !prev);
+                }}
+                className={`p-2 rounded-xl text-slate-700 dark:text-slate-200 border transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
                   isToolsDropdownOpen 
-                    ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/60 dark:border-emerald-700 text-emerald-600'
+                    ? 'bg-emerald-50 border-emerald-400 dark:bg-emerald-950/70 dark:border-emerald-600 text-emerald-600 shadow-xs'
                     : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
                 title="Sozlamalar va qo'shimcha vositalar"
+                aria-expanded={isToolsDropdownOpen}
               >
                 <SlidersHorizontal className="w-4 h-4" />
               </button>
 
               {/* Dropdown Card */}
               {isToolsDropdownOpen && (
-                <div className="absolute right-0 top-full pt-1.5 z-50 w-56 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div 
+                  className="absolute right-0 top-full mt-2 z-50 w-60 sm:w-64 animate-in fade-in slide-in-from-top-1 duration-150 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 space-y-1 text-xs">
                     
                     {/* Theme Toggle */}

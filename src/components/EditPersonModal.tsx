@@ -118,6 +118,50 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [newFatherBirthYear, setNewFatherBirthYear] = useState<string>('');
   const [newFatherGrandparentId, setNewFatherGrandparentId] = useState<string | null>(null);
 
+  // Find all invalid candidate IDs to prevent self-referencing and circular ancestry
+  const invalidParentIds = React.useMemo(() => {
+    const invalid = new Set<string>();
+    
+    // 1. Cannot be own father
+    if (personToEdit) {
+      invalid.add(personToEdit.id);
+    }
+    // 2. Child cannot be father of their own parent
+    if (childForNewParent) {
+      invalid.add(childForNewParent.id);
+    }
+    // 3. Spouse cannot be parent
+    if (spouseForPerson) {
+      invalid.add(spouseForPerson.id);
+    }
+
+    // 4. Find all descendants of personToEdit or childForNewParent
+    const targetRootIds = [
+      personToEdit?.id,
+      childForNewParent?.id
+    ].filter(Boolean) as string[];
+
+    const queue = [...targetRootIds];
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      invalid.add(currentId);
+      (Object.values(people) as Person[]).forEach((p) => {
+        if ((p.parentId === currentId || p.motherId === currentId) && !invalid.has(p.id)) {
+          invalid.add(p.id);
+          queue.push(p.id);
+        }
+      });
+    }
+
+    return invalid;
+  }, [personToEdit, childForNewParent, spouseForPerson, people]);
+
+  const availableParents = React.useMemo(() => {
+    return (Object.values(people) as Person[]).filter(
+      (p) => !invalidParentIds.has(p.id) && (p.gender === 'male' || !p.gender)
+    );
+  }, [people, invalidParentIds]);
+
   if (!isOpen) return null;
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -659,7 +703,11 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
           <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Shajaradagi otasi / bosh bo'g'in
+                {isAddingParent && childForNewParent
+                  ? targetRelationType === 'mother'
+                    ? `Onaning otasi (Bobo) / Bosh bo'g'in`
+                    : `Otaning o'z otasi (Bobo) / Bosh bo'g'in`
+                  : "Shajaradagi otasi / bosh bo'g'in"}
               </label>
               <button
                 type="button"
@@ -669,6 +717,12 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                 <span>{isAddingNewFather ? 'Bekor qilish' : '➕ Yangi ota qo\'shish'}</span>
               </button>
             </div>
+
+            {isAddingParent && childForNewParent && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                «{childForNewParent.name}» uchun yangi ota qo'shilmoqda. Agar uning ham otasi (bobo) shajarada mavjud bo'lsa tanlang, aks holda «Bosh ajdod» sifatida qoldiring.
+              </p>
+            )}
 
             {isAddingNewFather ? (
               <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 space-y-2.5 shadow-sm">
@@ -727,13 +781,11 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                 >
                   <option value="no_father">Ota belgilanmasin (Mustaqil / Otasiz)</option>
                   <option value="">Bosh ajdod (Shajara boshi / ildiz)</option>
-                  {(Object.values(people) as Person[])
-                    .filter((p) => !personToEdit || p.id !== personToEdit.id)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.surname || ''} — {p.generation}-pusht
-                      </option>
-                    ))}
+                  {availableParents.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.surname || ''} — {p.generation}-pusht
+                    </option>
+                  ))}
                 </select>
                 {isNoFatherSelected && (
                   <p className="text-[11px] text-amber-600 dark:text-amber-400">
