@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import googleAuthHandler from './api/auth/google';
 import sessionHandler from './api/auth/session';
 import healthHandler from './api/health';
+import presignHandler from './api/upload/presign';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,8 @@ async function startServer() {
   app.all('/api/auth/google', (req, res) => googleAuthHandler(req, res));
   app.all('/api/auth/session', (req, res) => sessionHandler(req, res));
   app.all('/api/health', (req, res) => healthHandler(req, res));
+  app.all('/api/upload/presign', (req, res) => presignHandler(req, res));
+  app.all('/api/upload/presigned-url', (req, res) => presignHandler(req, res));
 
   // Development vs Production
   if (process.env.NODE_ENV !== 'production') {

@@ -1,7 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import type { IncomingMessage, ServerResponse } from 'http';
 
-const DEFAULT_GOOGLE_CLIENT_ID = '399388832910-28s2k7714ovmd3bbt1bcd8n21mqn2t65.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_CLIENT_ID = '399388832910-8uikes6k5f91b5b8objvklrrgaji2ins.apps.googleusercontent.com';
 
 // CORS sarlavhalari
 function setCorsHeaders(req: any, res: any) {

@@ -1,17 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { Gender, Person } from '../types';
 import { fileToBase64 } from '../utils/storage';
+import { uploadImageToR2 } from '../utils/r2Upload';
 import { 
   X, 
   Upload, 
   Trash2, 
   User, 
   Calendar, 
-  Image as ImageIcon,
-  Camera,
-  AlertCircle,
-  Video,
-  Film
+  Image as ImageIcon, 
+  Camera, 
+  AlertCircle, 
+  Video, 
+  Film,
+  Cloud,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import { saveMediaFile, deleteMediaFile } from '../utils/mediaStorage';
 import confetti from 'canvas-confetti';
@@ -89,6 +93,11 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [location, setLocation] = useState<string>(personToEdit?.location || '');
   const [notes, setNotes] = useState<string>(personToEdit?.notes || '');
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(personToEdit?.photoUrl);
+  const [isPhotoUploading, setIsPhotoUploading] = useState<boolean>(false);
+  const [photoUploadProgress, setPhotoUploadProgress] = useState<number>(0);
+  const [isR2Photo, setIsR2Photo] = useState<boolean>(() => {
+    return Boolean(personToEdit?.photoUrl && personToEdit.photoUrl.startsWith('http'));
+  });
   
   // Video state (Biografik xotira videosi - 10 daqiqagacha)
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -166,18 +175,38 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 15 * 1024 * 1024) {
-        setError("Rasm hajmi 15MB dan oshmasligi kerak");
-        return;
+    if (!file) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      setError("Rasm hajmi 20MB dan oshmasligi kerak");
+      return;
+    }
+
+    setIsPhotoUploading(true);
+    setPhotoUploadProgress(10);
+    setError('');
+
+    try {
+      const result = await uploadImageToR2(file, {
+        folder: 'avatars',
+        onProgress: (pct) => setPhotoUploadProgress(pct),
+      });
+
+      if (result.success && result.url) {
+        setPhotoUrl(result.url);
+        setIsR2Photo(result.isR2);
+        setIsPhotoUploading(false);
+        setPhotoUploadProgress(100);
+      } else {
+        setError(result.error || "Rasmni yuklashda xatolik yuz berdi");
+        setIsPhotoUploading(false);
       }
-      try {
-        const base64 = await fileToBase64(file);
-        setPhotoUrl(base64);
-        setError('');
-      } catch (err: any) {
-        setError("Rasmni yuklashda xatolik yuz berdi");
-      }
+    } catch (err: any) {
+      console.error("[EditPersonModal] Rasm yuklash xatosi:", err);
+      setError("Rasmni yuklashda xatolik yuz berdi: " + (err?.message || ''));
+      setIsPhotoUploading(false);
+    } finally {
+      if (photoInputRef.current) photoInputRef.current.value = '';
     }
   };
 
@@ -437,8 +466,14 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             {/* Avatar Preview Box (Centered - avatar ustiga bosilganda rasm yuklanadi) */}
             <div className="relative group">
               <div 
-                onClick={() => photoInputRef.current?.click()}
-                className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden cursor-pointer shadow-lg border-2 border-emerald-500 relative flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                onClick={() => {
+                  if (!isPhotoUploading) {
+                    photoInputRef.current?.click();
+                  }
+                }}
+                className={`w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden shadow-lg border-2 border-emerald-500 relative flex items-center justify-center transition-transform ${
+                  isPhotoUploading ? 'cursor-wait opacity-90' : 'cursor-pointer hover:scale-105 active:scale-95'
+                }`}
                 title="Avatar ustiga bosib rasm yuklang"
               >
                 {photoUrl ? (
@@ -454,21 +489,33 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                   </div>
                 )}
 
+                {/* Yuklanish progress indikatori (Cloudflare R2) */}
+                {isPhotoUploading && (
+                  <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] flex flex-col items-center justify-center text-white z-20 p-2 animate-in fade-in">
+                    <Loader2 className="w-7 h-7 text-emerald-400 animate-spin mb-1" />
+                    <span className="text-xs font-black text-emerald-300">{photoUploadProgress}%</span>
+                    <span className="text-[9px] font-semibold text-slate-300 text-center leading-tight">R2 ga yuklanmoqda...</span>
+                  </div>
+                )}
+
                 {/* Overlay camera icon right on the avatar */}
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-1">
-                  <Camera className="w-6 h-6" />
-                  <span className="text-[10px] font-bold">O'zgartirish</span>
-                </div>
+                {!isPhotoUploading && (
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-1">
+                    <Camera className="w-6 h-6" />
+                    <span className="text-[10px] font-bold">O'zgartirish</span>
+                  </div>
+                )}
               </div>
 
-              {photoUrl && (
+              {photoUrl && !isPhotoUploading && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setPhotoUrl(undefined);
+                    setIsR2Photo(false);
                   }}
-                  className="absolute -top-1 -right-1 p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
+                  className="absolute -top-1 -right-1 p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer z-30"
                   title="Rasmni o'chirish"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -476,9 +523,17 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
               )}
             </div>
 
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Avatar ustiga bosib fotosurat yuklang yoki almashtiring
-            </p>
+            <div className="flex flex-col items-center gap-1">
+              {isR2Photo && photoUrl && (
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 animate-in fade-in">
+                  <Cloud className="w-3 h-3 text-emerald-500" />
+                  <span>Cloudflare R2 xotirasida</span>
+                </div>
+              )}
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Avatar ustiga bosib fotosurat yuklang yoki almashtiring
+              </p>
+            </div>
           </div>
 
           {/* 2. Ism va Familiya (Jins tanlashdan avval) */}
