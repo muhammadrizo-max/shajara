@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 
 const DEFAULT_GOOGLE_CLIENT_ID = '399388832910-8uikes6k5f91b5b8objvklrrgaji2ins.apps.googleusercontent.com';
 
-// CORS sarlavhalari
+// Xavfsiz CORS va HTTP Himoya sarlavhalari
 function setCorsHeaders(req: any, res: any) {
   const allowedOrigins = [
     'https://shajarachi.vercel.app',
@@ -14,15 +14,27 @@ function setCorsHeaders(req: any, res: any) {
   ];
 
   const origin = req.headers?.origin;
-  if (origin && allowedOrigins.includes(origin)) {
+  const isAllowed = origin && (
+    allowedOrigins.includes(origin) ||
+    origin.endsWith('.shajarachi.uz') ||
+    origin.endsWith('.vercel.app')
+  );
+
+  if (isAllowed) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Ruxsat etilmagan originlar uchun credentials bermaslik
+    res.setHeader('Access-Control-Allow-Origin', 'https://www.shajarachi.uz');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Himoya HTTP sarlavhalari (MIME Sniffing, Clickjacking va Referrer oqishidan himoya)
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 }
 
 function parseJsonBody(req: any): Promise<any> {

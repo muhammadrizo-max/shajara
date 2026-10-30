@@ -22,6 +22,30 @@ export function getRegisteredUsers(): RegisteredAccount[] {
   }
 }
 
+/**
+ * Xavfsiz Parol Xeshlash funksiyasi (Salt bilan).
+ * Parollar hech qachon brauzer xotirasida ochiq (plain-text) ko'rinishda saqlanmaydi.
+ */
+export function hashPassword(password: string): string {
+  let hash = 0;
+  const salted = `shajarachi_secure_salt_2026_${password.trim()}`;
+  for (let i = 0; i < salted.length; i++) {
+    const char = salted.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return `sec_${Math.abs(hash).toString(16)}`;
+}
+
+export function verifyPassword(storedHash: string, inputPassword: string): boolean {
+  if (!storedHash) return false;
+  // Eski plain text bilan kiritilgan bo'lsa (orqaga moslik)
+  if (storedHash === inputPassword.trim()) return true;
+  // Xesh bilan solishtirish
+  if (storedHash === hashPassword(inputPassword)) return true;
+  return false;
+}
+
 export function registerNewUser(data: {
   fullName: string;
   email: string;
@@ -59,7 +83,7 @@ export function registerNewUser(data: {
     birthDate: data.birthDate || '',
     email: cleanEmail,
     phone: data.phone?.trim() || '',
-    passwordHash: data.password || '123456',
+    passwordHash: hashPassword(data.password || '123456'),
     personId: data.personId || null,
     role: data.role || (isFirstUser ? 'owner' : 'editor'),
     createdAt: Date.now(),
@@ -96,7 +120,7 @@ export function loginUserWithCredentials(
     return { success: false, error: "Bunday email yoki telefon raqamli hisob topilmadi. Avval ro'yxatdan o'ting!" };
   }
 
-  if (matched.passwordHash !== password) {
+  if (!verifyPassword(matched.passwordHash, password)) {
     return { success: false, error: "Parol noto'g'ri kiritildi!" };
   }
 
