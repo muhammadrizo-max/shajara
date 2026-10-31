@@ -354,9 +354,14 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       }
     } else if (isAddingParent && childForNewParent) {
       if (gender === 'female') {
+        const fatherId = childForNewParent.parentId;
+        const father = fatherId && people[fatherId] ? people[fatherId] : null;
+
         const updatedMother: Person = {
           ...updatedPerson,
           generation: Math.max(1, childForNewParent.generation - 1),
+          spouseId: father ? father.id : undefined,
+          spouseName: father ? `${father.name} ${father.surname || ''}`.trim() : undefined,
         };
         const updatedChild: Person = {
           ...childForNewParent,

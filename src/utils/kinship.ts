@@ -63,16 +63,87 @@ export function recalculateAllGenerations(people: Record<string, Person>): Recor
   const allPeople = Object.values(updated);
   if (allPeople.length === 0) return updated;
 
-  // Roots are people whose parentId is null or not present in people
-  const roots = allPeople.filter((p) => !p.parentId || !updated[p.parentId]);
+  // 1. Reciprocal relation link repairing (Ensure both spouses reference each other, and children get motherId/parentId)
+  for (const p of allPeople) {
+    // If p has spouseId, ensure spouse has p.id as spouseId
+    if (p.spouseId && updated[p.spouseId]) {
+      const sp = updated[p.spouseId];
+      if (sp.spouseId !== p.id) {
+        updated[sp.id] = { ...sp, spouseId: p.id, spouseName: `${p.name} ${p.surname || ''}`.trim() };
+      }
+    }
+    // If child has parentId (father) and father has spouse (mother), link child.motherId
+    if (p.parentId && updated[p.parentId]) {
+      const fa = updated[p.parentId];
+      if (fa.spouseId && updated[fa.spouseId] && !p.motherId) {
+        updated[p.id] = { 
+          ...p, 
+          motherId: fa.spouseId, 
+          motherName: `${updated[fa.spouseId].name} ${updated[fa.spouseId].surname || ''}`.trim() 
+        };
+      }
+    }
+    // If child has motherId and mother has spouse (father), link child.parentId
+    if (p.motherId && updated[p.motherId]) {
+      const mo = updated[p.motherId];
+      if (mo.spouseId && updated[mo.spouseId] && !p.parentId) {
+        updated[p.id] = { ...p, parentId: mo.spouseId };
+      }
+    }
+    // If child has both parentId and motherId, link father and mother as spouses
+    if (p.parentId && p.motherId && updated[p.parentId] && updated[p.motherId]) {
+      const fa = updated[p.parentId];
+      const mo = updated[p.motherId];
+      if (!fa.spouseId) {
+        updated[fa.id] = { ...fa, spouseId: mo.id, spouseName: `${mo.name} ${mo.surname || ''}`.trim() };
+      }
+      if (!mo.spouseId) {
+        updated[mo.id] = { ...mo, spouseId: fa.id, spouseName: `${fa.name} ${fa.surname || ''}`.trim() };
+      }
+    }
+  }
+
+  // 2. Determine root ancestor nodes:
+  // Nodes with no parent, and if they have a spouse, only the main lineage or male spouse is root
+  const roots = Object.values(updated).filter((p) => {
+    if (p.parentId && updated[p.parentId]) return false;
+    if (p.spouseId && updated[p.spouseId]) {
+      const sp = updated[p.spouseId];
+      // If spouse has an ancestor in the tree, spouse's branch is the ancestor, so p is NOT root
+      if (sp.parentId && updated[sp.parentId]) return false;
+      // If neither has parent, only choose one as root
+      if (p.gender === 'female' && sp.gender === 'male') return false;
+      if (p.gender === sp.gender && p.id > sp.id) return false;
+    }
+    return true;
+  });
 
   const assignGen = (id: string, gen: number, visited: Set<string>) => {
     if (visited.has(id) || !updated[id]) return;
     visited.add(id);
-    updated[id] = { ...updated[id], generation: gen };
-    const children = Object.values(updated).filter((p) => p.parentId === id);
-    for (const child of children) {
-      assignGen(child.id, gen + 1, visited);
+    const person = updated[id];
+    updated[id] = { ...person, generation: gen };
+
+    // Spouse ALWAYS gets the exact same generation
+    if (person.spouseId && updated[person.spouseId]) {
+      const sp = updated[person.spouseId];
+      if (!visited.has(sp.id)) {
+        visited.add(sp.id);
+        updated[sp.id] = { ...sp, generation: gen };
+      }
+    }
+
+    // Children are those with parentId or motherId of this person (or spouse)
+    const childIds = new Set<string>();
+    Object.values(updated).forEach((c) => {
+      if (c.parentId === id || c.motherId === id) childIds.add(c.id);
+      if (person.spouseId && (c.parentId === person.spouseId || c.motherId === person.spouseId)) {
+        childIds.add(c.id);
+      }
+    });
+
+    for (const cId of childIds) {
+      assignGen(cId, gen + 1, visited);
     }
   };
 
@@ -81,8 +152,8 @@ export function recalculateAllGenerations(people: Record<string, Person>): Recor
     assignGen(root.id, 1, visited);
   }
 
-  // Handle any disconnected or cyclic nodes
-  for (const p of allPeople) {
+  // Handle any remaining disconnected nodes
+  for (const p of Object.values(updated)) {
     if (!visited.has(p.id)) {
       assignGen(p.id, 1, visited);
     }
@@ -91,9 +162,16 @@ export function recalculateAllGenerations(people: Record<string, Person>): Recor
   return updated;
 }
 
-// Get all children of a person
+// Get all children of a person (by parentId or motherId)
 export function getChildren(personId: string, people: Record<string, Person>): Person[] {
-  return Object.values(people).filter((p) => p.parentId === personId);
+  const current = people[personId];
+  return Object.values(people).filter((p) => {
+    if (p.parentId === personId || p.motherId === personId) return true;
+    if (current?.spouseId && (p.parentId === current.spouseId || p.motherId === current.spouseId)) {
+      return true;
+    }
+    return false;
+  });
 }
 
 // Get siblings of a person

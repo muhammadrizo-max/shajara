@@ -606,6 +606,14 @@ export default function App() {
     setIsEditModalOpen(true);
   };
 
+  const handleUpdateFamilyName = (newName: string) => {
+    setState((prev) => {
+      const updated = { ...prev, familyName: newName };
+      saveFamilyTreeState(updated, prev.currentUser?.id);
+      return updated;
+    });
+  };
+
   const handleExport = () => {
     exportStateAsJSON(state);
     showToast("Shajara fayli (JSON) muvaffaqiyatli yuklab olindi.");
@@ -961,6 +969,8 @@ export default function App() {
         people={state.people}
         meId={state.meId}
         rootId={state.rootId}
+        familyName={state.familyName || '7 Ajdod Shajarasi'}
+        onUpdateFamilyName={handleUpdateFamilyName}
         viewMode={viewMode}
         onViewModeChange={(m) => {
           setViewMode(m);

@@ -14,7 +14,8 @@ import {
   Sparkles, 
   HelpCircle,
   FileText,
-  Info
+  Info,
+  Edit3
 } from 'lucide-react';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
 import { Person, ViewMode } from '../types';
@@ -25,6 +26,8 @@ interface LeftSidebarProps {
   people: Record<string, Person>;
   meId: string;
   rootId: string;
+  familyName?: string;
+  onUpdateFamilyName?: (name: string) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onOpenAddModal: () => void;
@@ -41,6 +44,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   people,
   meId,
   rootId,
+  familyName,
+  onUpdateFamilyName,
   viewMode,
   onViewModeChange,
   onOpenAddModal,
@@ -112,6 +117,33 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
           {/* Scrollable Body */}
           <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+
+            {/* Daraxt nomi va boshqaruvi (Foydalanuvchi talabi) */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Edit3 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Daraxt nomi:</span>
+                </span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/60">
+                  Avtomatik saqlanadi
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  id="input-sidebar-family-name"
+                  type="text"
+                  value={familyName || ''}
+                  onChange={(e) => onUpdateFamilyName?.(e.target.value)}
+                  placeholder="Masalan: Akbarovlar shajarasi"
+                  className="w-full px-3 py-2 pr-8 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all shadow-xs"
+                />
+                <Edit3 className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                Nomni istalgancha o'zgartirishingiz mumkin. O'zgarishlar darhol avtomatik saqlanadi.
+              </p>
+            </div>
 
             {/* Tree Summary Card */}
             <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-slate-100/50 dark:from-emerald-950/40 dark:via-slate-800/50 dark:to-slate-900 border border-emerald-500/20 space-y-2.5">

@@ -19,6 +19,7 @@ export function loadFamilyTreeState(userId?: string | null): FamilyTreeState {
           meId: parsed.meId || '',
           currentUser: parsed.currentUser || null,
           activePerspectiveId: parsed.activePerspectiveId || undefined,
+          familyName: parsed.familyName || '7 Ajdod Shajarasi',
         };
       }
     }
@@ -32,6 +33,7 @@ export function loadFamilyTreeState(userId?: string | null): FamilyTreeState {
     meId: '',
     currentUser: null,
     activePerspectiveId: undefined,
+    familyName: '7 Ajdod Shajarasi',
   };
 }
 

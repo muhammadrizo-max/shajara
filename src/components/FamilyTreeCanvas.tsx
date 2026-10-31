@@ -16,7 +16,8 @@ import {
   Plus,
   Bot,
   UserPlus,
-  Sparkles
+  Sparkles,
+  Heart
 } from 'lucide-react';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
 
@@ -268,13 +269,39 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   // Dynamically resolve all top root ancestors so that:
   // 1. Any added parent or ancestor above meId is automatically at the top of the tree.
   // 2. All branches/trees in people are rendered and never hidden.
+  // 3. Spouses whose partner is already in an ancestor branch are NOT rendered as orphan roots!
   const displayRoots = useMemo(() => {
     const allPeople = Object.values(people) as Person[];
     if (allPeople.length === 0) return [];
 
     // Find all nodes that have no parent inside the current people dataset
     const roots = allPeople
-      .filter((p) => !p.parentId || !people[p.parentId])
+      .filter((p) => {
+        // If p has a parent or mother in tree, p is not a root
+        if (p.parentId && people[p.parentId]) return false;
+        if (p.motherId && people[p.motherId]) return false;
+
+        // If p has a spouse:
+        const spouseId = p.spouseId || allPeople.find((other) => other.spouseId === p.id)?.id;
+        const spouse = spouseId ? people[spouseId] : null;
+
+        if (spouse) {
+          // If spouse has a parent or mother in tree, spouse is rendered in that ancestor branch,
+          // so p will be rendered beside spouse in the couple unit, NOT as an orphan root!
+          if ((spouse.parentId && people[spouse.parentId]) || (spouse.motherId && people[spouse.motherId])) {
+            return false;
+          }
+          // If neither spouse has parents in tree, only choose one as root node (e.g. male or smaller id)
+          if (p.gender === 'female' && spouse.gender === 'male') {
+            return false;
+          }
+          if (p.gender === spouse.gender && p.id > spouse.id) {
+            return false;
+          }
+        }
+
+        return true;
+      })
       .map((p) => p.id);
 
     if (roots.length === 0) {
@@ -285,7 +312,10 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     const primaryTarget = (meId && people[meId]) ? meId : (rootId && people[rootId]) ? rootId : roots[0];
     const meRoot = findRootAncestorId(primaryTarget, people);
 
-    const orderedRoots = [meRoot, ...roots.filter((r) => r !== meRoot)];
+    const orderedRoots = [
+      ...(roots.includes(meRoot) ? [meRoot] : []),
+      ...roots.filter((r) => r !== meRoot)
+    ];
     return Array.from(new Set(orderedRoots));
   }, [people, rootId, meId]);
 
@@ -335,53 +365,163 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   // Active temporary perspective person
   const activePerspectivePerson = activePerspectiveId ? people[activePerspectiveId] : null;
 
+  // Set to avoid duplicate rendering of individuals or spouses in the same render pass
+  const renderedPersonIds = useRef<Set<string>>(new Set());
+
   // Recursive Tree Node Renderer
   const renderTreeNode = (personId: string, level = 0): React.ReactNode => {
     const person = people[personId];
     if (!person) return null;
+    if (renderedPersonIds.current.has(personId)) return null;
 
-    const children = getChildren(personId, people);
+    renderedPersonIds.current.add(personId);
+    const allPeopleList = Object.values(people) as Person[];
+
+    // Identify spouse (either direction)
+    const spouseId = person.spouseId || allPeopleList.find((other) => other.spouseId === person.id)?.id;
+    const spouse = spouseId && people[spouseId] ? people[spouseId] : null;
+
+    if (spouse) {
+      renderedPersonIds.current.add(spouse.id);
+    }
+
+    // Determine left and right card placement:
+    // User requirement: Otam and Onam side by side; the lineage from above lands directly onto the branch child's card.
+    const isPersonBiologicalChild = Boolean(person.parentId && people[person.parentId]);
+    const isSpouseBiologicalChild = Boolean(spouse?.parentId && people[spouse.parentId]);
+
+    let leftPerson = person;
+    let rightPerson = spouse;
+
+    if (spouse) {
+      if (isSpouseBiologicalChild && !isPersonBiologicalChild) {
+        leftPerson = spouse;
+        rightPerson = person;
+      } else if (!isSpouseBiologicalChild && !isPersonBiologicalChild) {
+        // Neither has parent: male on left
+        if (person.gender === 'female' && spouse.gender === 'male') {
+          leftPerson = spouse;
+          rightPerson = person;
+        }
+      }
+    }
+
+    // Children belonging to this couple (or single parent)
+    const childrenMap = new Map<string, Person>();
+    allPeopleList.forEach((c) => {
+      if (c.parentId === person.id || c.motherId === person.id) {
+        childrenMap.set(c.id, c);
+      }
+      if (spouse && (c.parentId === spouse.id || c.motherId === spouse.id)) {
+        childrenMap.set(c.id, c);
+      }
+    });
+    const children = Array.from(childrenMap.values());
     const hasChildren = children.length > 0;
-    const isExpanded = !collapsedIds.has(personId);
-    const matched = isMatch(person);
+    const isExpanded = !collapsedIds.has(person.id) && (!spouse || !collapsedIds.has(spouse.id));
 
     return (
       <div key={person.id} className="flex flex-col items-center relative">
-        {/* Node Card */}
-        <div className="z-10 interactive-control">
-          <PersonCard
-            person={person}
-            people={people}
-            meId={meId}
-            activePerspectiveId={activePerspectiveId}
-            currentUser={currentUser}
-            hasChildren={hasChildren}
-            isExpanded={isExpanded}
-            showLifeline={showLifelines}
-            onToggleExpand={() => toggleExpand(person.id)}
-            onSelect={onSelectPerson}
-            onEdit={onEditPerson}
-            onAddChild={onAddChild}
-            onAddParent={onAddParent}
-            onOpenAddRelative={onOpenAddRelative}
-            onSetTemporaryPerspective={onSetTemporaryPerspective}
-            onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
-            isSelected={selectedPersonId === person.id}
-            isHighlighted={matched}
-          />
+        {/* Node Card / Couple Unit */}
+        <div className="z-10 interactive-control flex items-center justify-center relative">
+          {spouse && rightPerson ? (
+            <div className="flex items-center justify-center gap-2 sm:gap-3 relative">
+              {/* Left Card */}
+              <div className="relative">
+                <PersonCard
+                  person={leftPerson}
+                  people={people}
+                  meId={meId}
+                  activePerspectiveId={activePerspectiveId}
+                  currentUser={currentUser}
+                  hasChildren={hasChildren}
+                  isExpanded={isExpanded}
+                  showLifeline={showLifelines}
+                  onToggleExpand={() => toggleExpand(leftPerson.id)}
+                  onSelect={onSelectPerson}
+                  onEdit={onEditPerson}
+                  onAddChild={onAddChild}
+                  onAddParent={onAddParent}
+                  onOpenAddRelative={onOpenAddRelative}
+                  onSetTemporaryPerspective={onSetTemporaryPerspective}
+                  onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
+                  isSelected={selectedPersonId === leftPerson.id}
+                  isHighlighted={isMatch(leftPerson)}
+                />
+              </div>
+
+              {/* Horizontal Bridge Line with Couple Heart Badge (O'rtasidan tortilgan chiziq) */}
+              <div className="flex items-center justify-center shrink-0 relative px-1 sm:px-2 z-10">
+                <div className="w-5 sm:w-8 h-1 bg-gradient-to-r from-emerald-500 via-rose-400 to-rose-500 rounded-full shadow-xs" />
+                <div
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white dark:bg-slate-800 border-2 border-rose-400 dark:border-rose-500 flex items-center justify-center text-rose-500 shadow-md z-10 mx-0.5"
+                  title="Oila rishtasi (Turmush o'rtoqlar)"
+                >
+                  <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-rose-500 text-rose-500" />
+                </div>
+                <div className="w-5 sm:w-8 h-1 bg-gradient-to-r from-rose-500 via-rose-400 to-emerald-500 rounded-full shadow-xs" />
+              </div>
+
+              {/* Right Card */}
+              <div className="relative">
+                <PersonCard
+                  person={rightPerson}
+                  people={people}
+                  meId={meId}
+                  activePerspectiveId={activePerspectiveId}
+                  currentUser={currentUser}
+                  hasChildren={hasChildren}
+                  isExpanded={isExpanded}
+                  showLifeline={showLifelines}
+                  onToggleExpand={() => toggleExpand(rightPerson.id)}
+                  onSelect={onSelectPerson}
+                  onEdit={onEditPerson}
+                  onAddChild={onAddChild}
+                  onAddParent={onAddParent}
+                  onOpenAddRelative={onOpenAddRelative}
+                  onSetTemporaryPerspective={onSetTemporaryPerspective}
+                  onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
+                  isSelected={selectedPersonId === rightPerson.id}
+                  isHighlighted={isMatch(rightPerson)}
+                />
+              </div>
+            </div>
+          ) : (
+            <PersonCard
+              person={person}
+              people={people}
+              meId={meId}
+              activePerspectiveId={activePerspectiveId}
+              currentUser={currentUser}
+              hasChildren={hasChildren}
+              isExpanded={isExpanded}
+              showLifeline={showLifelines}
+              onToggleExpand={() => toggleExpand(person.id)}
+              onSelect={onSelectPerson}
+              onEdit={onEditPerson}
+              onAddChild={onAddChild}
+              onAddParent={onAddParent}
+              onOpenAddRelative={onOpenAddRelative}
+              onSetTemporaryPerspective={onSetTemporaryPerspective}
+              onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
+              isSelected={selectedPersonId === person.id}
+              isHighlighted={isMatch(person)}
+            />
+          )}
         </div>
 
         {/* Children Branch */}
         {hasChildren && isExpanded && (
-          <div className="flex flex-col items-center mt-8 relative">
-            {/* Vertical connector line from parent to horizontal bar */}
-            <div className="w-0.5 h-8 bg-slate-300 dark:bg-slate-700 -mt-8 mb-0" />
+          <div className="flex flex-col items-center mt-6 sm:mt-8 relative w-full">
+            {/* Vertical connector line from middle of couple (heart) or single parent card down to children bar */}
+            <div className="w-0.5 h-7 sm:h-8 bg-gradient-to-b from-rose-400 via-emerald-500 to-slate-400 dark:to-slate-600 rounded-full" />
 
-            <div className="flex items-start justify-center gap-6 relative pt-4">
-              {/* Horizontal line connecting all children if multiple */}
+            {/* Branch to children */}
+            <div className="flex items-start justify-center gap-8 sm:gap-10 relative pt-4">
+              {/* Rounded/curved horizontal connector bar across children */}
               {children.length > 1 && (
                 <div
-                  className="absolute top-0 h-0.5 bg-slate-300 dark:bg-slate-700"
+                  className="absolute top-0 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full"
                   style={{
                     left: 'calc(132px)',
                     right: 'calc(132px)',
@@ -389,14 +529,28 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 />
               )}
 
-              {/* Render each child with its top branch connector */}
-              {children.map((child) => (
-                <div key={child.id} className="flex flex-col items-center relative">
-                  {/* Vertical connector line from horizontal bar to child */}
-                  <div className="w-0.5 h-4 bg-slate-300 dark:bg-slate-700 absolute -top-4" />
-                  {renderTreeNode(child.id, level + 1)}
-                </div>
-              ))}
+              {/* Render each child with top branch connector */}
+              {children.map((child) => {
+                const childSpouseId = child.spouseId || allPeopleList.find((other) => other.spouseId === child.id)?.id;
+                const childSpouse = childSpouseId ? people[childSpouseId] : null;
+
+                // When child is in a couple, ensure incoming line lands on child's card
+                const isChildLeftInCouple = child.gender === 'male' || (child.parentId && !childSpouse?.parentId);
+                const topConnectorStyle: React.CSSProperties = childSpouse
+                  ? { left: isChildLeftInCouple ? '128px' : 'calc(100% - 128px)', transform: 'translateX(-50%)' }
+                  : { left: '50%', transform: 'translateX(-50%)' };
+
+                return (
+                  <div key={child.id} className="flex flex-col items-center relative">
+                    {/* Top vertical connector from horizontal bar down to child */}
+                    <div 
+                      className="w-0.5 h-4 bg-slate-300 dark:bg-slate-700 absolute -top-4 rounded-full" 
+                      style={topConnectorStyle}
+                    />
+                    {renderTreeNode(child.id, level + 1)}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -600,7 +754,10 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               {isLoading && (
                 <div className="absolute inset-0 bg-white/20 dark:bg-slate-950/20 backdrop-blur-[1px] rounded-3xl pointer-events-none z-10" />
               )}
-              {displayRoots.map((rId) => renderTreeNode(rId))}
+              {(() => {
+                renderedPersonIds.current.clear();
+                return displayRoots.map((rId) => renderTreeNode(rId));
+              })()}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center p-8 sm:p-14 max-w-md mx-auto text-center space-y-5">
