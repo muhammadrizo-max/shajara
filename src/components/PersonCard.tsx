@@ -7,7 +7,6 @@ import {
   ChevronRight, 
   Plus, 
   Edit3, 
-  Eye, 
   Crown,
   Briefcase,
   MapPin,
@@ -284,35 +283,16 @@ export const PersonCard: React.FC<PersonCardProps> = ({
 
         {/* Action Toolbar on Card */}
         <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1">
-            {/* View full drawer */}
-            <button
-              id={`btn-view-${person.id}`}
-              onClick={() => onSelect(person)}
-              title="Batafsil ma'lumot"
-              className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-
-            {/* Edit (Faqatgina o'zining profilini tahrirlash mumkin) */}
-            {canEdit ? (
+          <div className="flex items-center gap-1.5">
+            {/* Edit (Faqatgina ruxsat etilgan foydalanuvchi yoki shajara egasi uchun) */}
+            {canEdit && (
               <button
                 id={`btn-edit-${person.id}`}
                 onClick={handleEditClick}
-                title="O'z profilingizni tahrirlash"
-                className="p-1.5 rounded-lg text-blue-600 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-800 transition-colors"
+                title="Shaxs ma'lumotlarini tahrirlash"
+                className="p-1.5 rounded-lg text-blue-600 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
               >
                 <Edit3 className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                id={`btn-edit-locked-${person.id}`}
-                onClick={handleEditClick}
-                title="Tahrirlash yopiq (Faqat o'zingizning ma'lumotlaringizni tahrirlashingiz mumkin)"
-                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-not-allowed"
-              >
-                <Lock className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -333,23 +313,26 @@ export const PersonCard: React.FC<PersonCardProps> = ({
             )}
           </div>
 
-          {/* Vaqtinchalik qarindoshlik nuqtai nazari (3-rasm bo'yicha vaqtinchalik qilingan) */}
-          <button
-            id={`btn-temp-perspective-${person.id}`}
-            onClick={() => onSetTemporaryPerspective(person.id)}
-            title={
-              isTemporaryPerspective
-                ? "Vaqtinchalik nuqtai nazar faol (Asl profilingizga qaytish uchun bosing)"
-                : `«${person.name}» nomidan vaqtincha qarindoshlikni tekshirish`
-            }
-            className={`p-1.5 rounded-lg transition-colors ${
-              isTemporaryPerspective
-                ? 'bg-amber-500 text-white shadow-sm ring-1 ring-amber-400'
-                : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Compass className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Vaqtinchalik qarindoshlik nuqtai nazari — Faqat BOSHQA shaxslarning kartochkasida ko'rinadi, O'ZINIKIDA EMAS */}
+            {!isSelf && (
+              <button
+                id={`btn-temp-perspective-${person.id}`}
+                onClick={() => onSetTemporaryPerspective(person.id)}
+                title={
+                  isTemporaryPerspective
+                    ? "Vaqtinchalik nuqtai nazar faol (Asl profilingizga qaytish uchun bosing)"
+                    : `«${person.name}» nomidan vaqtincha qarindoshlikni tekshirish`
+                }
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  isTemporaryPerspective
+                    ? 'bg-amber-500 text-white shadow-sm ring-1 ring-amber-400'
+                    : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Compass className="w-4 h-4" />
+              </button>
+            )}
 
           {/* Expand / Collapse Button if has children */}
           {hasChildren && (
@@ -368,6 +351,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 };

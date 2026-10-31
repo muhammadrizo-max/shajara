@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Gender, Person } from '../types';
 import { fileToBase64 } from '../utils/storage';
 import { uploadImageToR2 } from '../utils/r2Upload';
@@ -11,13 +11,10 @@ import {
   Image as ImageIcon, 
   Camera, 
   AlertCircle, 
-  Video, 
-  Film,
   Cloud,
   CheckCircle2,
   Loader2
 } from 'lucide-react';
-import { saveMediaFile, deleteMediaFile } from '../utils/mediaStorage';
 import confetti from 'canvas-confetti';
 
 interface EditPersonModalProps {
@@ -98,22 +95,9 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [isR2Photo, setIsR2Photo] = useState<boolean>(() => {
     return Boolean(personToEdit?.photoUrl && personToEdit.photoUrl.startsWith('http'));
   });
-  
-  // Video state (Biografik xotira videosi - 10 daqiqagacha)
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const [biographyVideoUrl, setBiographyVideoUrl] = useState<string | undefined>(
-    personToEdit?.biographyVideoUrl
-  );
-  const [biographyMediaId, setBiographyMediaId] = useState<string | undefined>(
-    personToEdit?.biographyMediaId
-  );
-  const [biographyVideoDuration, setBiographyVideoDuration] = useState<number | undefined>(
-    personToEdit?.biographyVideoDuration
-  );
-  const [isVideoUploading, setIsVideoUploading] = useState<boolean>(false);
 
   // Random gradient color selected automatically
-  const [avatarColor] = useState<string>(() => {
+  const [avatarColor, setAvatarColor] = useState<string>(() => {
     if (personToEdit?.avatarColor) return personToEdit.avatarColor;
     return AVATAR_GRADIENTS[Math.floor(Math.random() * AVATAR_GRADIENTS.length)];
   });
@@ -126,6 +110,77 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [newFatherSurname, setNewFatherSurname] = useState<string>('');
   const [newFatherBirthYear, setNewFatherBirthYear] = useState<string>('');
   const [newFatherGrandparentId, setNewFatherGrandparentId] = useState<string | null>(null);
+
+  // Synchronize internal state whenever modal opens or props change
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (personToEdit) {
+      setName(personToEdit.name || '');
+      setSurname(personToEdit.surname || '');
+      setGender(personToEdit.gender || 'male');
+      setParentId(personToEdit.parentId ?? null);
+      setIsNoFatherSelected(personToEdit.parentId === null);
+      setIsAlive(personToEdit.isAlive !== false);
+      const onlyYr = Boolean(!personToEdit.birthDate && personToEdit.birthYear);
+      setOnlyYearKnown(onlyYr);
+      setBirthDate(personToEdit.birthDate || '');
+      setBirthYear(personToEdit.birthYear || '');
+      setDeathYear(personToEdit.deathYear || '');
+      setLocation(personToEdit.location || '');
+      setNotes(personToEdit.notes || '');
+      setPhotoUrl(personToEdit.photoUrl);
+      setIsR2Photo(Boolean(personToEdit.photoUrl && personToEdit.photoUrl.startsWith('http')));
+      setAvatarColor(personToEdit.avatarColor || AVATAR_GRADIENTS[Math.floor(Math.random() * AVATAR_GRADIENTS.length)]);
+      setError('');
+    } else {
+      // Adding new relative
+      setName('');
+      setSurname('');
+
+      // Auto gender by relation type:
+      let targetGender: Gender = 'male';
+      if (targetRelationType === 'mother' || targetRelationType === 'daughter') {
+        targetGender = 'female';
+      } else if (targetRelationType === 'father' || targetRelationType === 'son') {
+        targetGender = 'male';
+      } else if (targetRelationType === 'spouse' && spouseForPerson) {
+        targetGender = spouseForPerson.gender === 'male' ? 'female' : 'male';
+      } else if (initialGender) {
+        targetGender = initialGender;
+      }
+      setGender(targetGender);
+
+      if (parentForNewChild) {
+        setParentId(parentForNewChild.id);
+        setIsNoFatherSelected(false);
+      } else {
+        setParentId(null);
+        setIsNoFatherSelected(false);
+      }
+
+      setIsAlive(true);
+      setOnlyYearKnown(false);
+      setBirthDate('');
+      setBirthYear('');
+      setDeathYear('');
+      setLocation('');
+      setNotes('');
+      setPhotoUrl(undefined);
+      setIsR2Photo(false);
+      setAvatarColor(AVATAR_GRADIENTS[Math.floor(Math.random() * AVATAR_GRADIENTS.length)]);
+      setError('');
+    }
+    setIsAddingNewFather(false);
+  }, [
+    isOpen,
+    personToEdit,
+    parentForNewChild,
+    childForNewParent,
+    spouseForPerson,
+    targetRelationType,
+    initialGender,
+  ]);
 
   // Find all invalid candidate IDs to prevent self-referencing and circular ancestry
   const invalidParentIds = React.useMemo(() => {
@@ -210,63 +265,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
     }
   };
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    if (file.size > 300 * 1024 * 1024) {
-      setError("Video hajmi 300MB dan oshmasligi kerak");
-      return;
-    }
-
-    setIsVideoUploading(true);
-    setError('');
-
-    try {
-      const mediaId = biographyMediaId || `bio_vid_${Date.now()}`;
-      const videoEl = document.createElement('video');
-      videoEl.preload = 'metadata';
-      const tempUrl = URL.createObjectURL(file);
-      videoEl.src = tempUrl;
-
-      videoEl.onloadedmetadata = async () => {
-        URL.revokeObjectURL(tempUrl);
-        const duration = Math.round(videoEl.duration);
-
-        if (duration > 600) {
-          setError("Video davomiyligi maksimum 10 daqiqa (600 soniya) bo'lishi kerak");
-          setIsVideoUploading(false);
-          return;
-        }
-
-        const storedUrl = await saveMediaFile(mediaId, file, 'bio-video', duration);
-        setBiographyMediaId(mediaId);
-        setBiographyVideoUrl(storedUrl);
-        setBiographyVideoDuration(duration);
-        setIsVideoUploading(false);
-      };
-
-      videoEl.onerror = async () => {
-        URL.revokeObjectURL(tempUrl);
-        const storedUrl = await saveMediaFile(mediaId, file, 'bio-video');
-        setBiographyMediaId(mediaId);
-        setBiographyVideoUrl(storedUrl);
-        setIsVideoUploading(false);
-      };
-    } catch (err: any) {
-      setError("Videoni saqlashda xatolik yuz berdi");
-      setIsVideoUploading(false);
-    }
-  };
-
-  const handleRemoveVideo = async () => {
-    if (biographyMediaId) {
-      await deleteMediaFile(biographyMediaId);
-    }
-    setBiographyVideoUrl(undefined);
-    setBiographyMediaId(undefined);
-    setBiographyVideoDuration(undefined);
-  };
 
   const handleCreateInlineFather = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -327,11 +326,10 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       deathYear: !isAlive ? (deathYear.trim() || undefined) : undefined,
       isAlive,
       location: location.trim() || undefined,
-      notes: notes.trim() || undefined,
       photoUrl,
-      biographyVideoUrl,
-      biographyMediaId,
-      biographyVideoDuration,
+      biographyVideoUrl: personToEdit?.biographyVideoUrl,
+      biographyMediaId: personToEdit?.biographyMediaId,
+      biographyVideoDuration: personToEdit?.biographyVideoDuration,
       avatarColor,
       generation: calculatedGeneration,
     };
@@ -687,72 +685,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             </div>
           </div>
 
-          {/* 5. Xotira videosi / Biografik video (10 daqiqagacha) */}
-          <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Video className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Biografik video / Xotira (10 daqiqagacha)</span>
-              </span>
-              <span className="text-[10px] text-slate-400">
-                Max: 10 daqiqa / 300MB
-              </span>
-            </div>
 
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleVideoUpload}
-              className="hidden"
-              id="file-video-input"
-            />
-
-            {biographyVideoUrl ? (
-              <div className="space-y-2">
-                <div className="relative rounded-2xl overflow-hidden bg-black aspect-video max-h-48 flex items-center justify-center">
-                  <video
-                    src={biographyVideoUrl}
-                    controls
-                    className="w-full h-full object-contain"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleRemoveVideo}
-                    className="absolute top-2 right-2 p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full shadow-lg transition-transform hover:scale-110 cursor-pointer"
-                    title="Videoni o'chirish"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {biographyVideoDuration && (
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
-                    <span>Davomiyligi: {Math.floor(biographyVideoDuration / 60)} daq {biographyVideoDuration % 60} soniya</span>
-                    <button
-                      type="button"
-                      onClick={() => videoInputRef.current?.click()}
-                      className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
-                    >
-                      Boshqa video tanlash
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={isVideoUploading}
-                  className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white/60 dark:bg-slate-800/40 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 text-xs font-bold text-slate-700 dark:text-slate-200 flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Film className="w-5 h-5 text-emerald-600" />
-                  <span>{isVideoUploading ? "Video yuklanmoqda..." : "Shaxsning qisqa video xotirasini yuklash"}</span>
-                  <span className="text-[10px] text-slate-400 font-normal">MP4, MOV, WebM formatlari (10 daqiqagacha)</span>
-                </button>
-              </div>
-            )}
-          </div>
 
           {/* 6. Otasi (Parent selector) */}
           <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">

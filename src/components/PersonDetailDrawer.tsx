@@ -14,12 +14,14 @@ import {
   GitBranch, 
   ChevronRight,
   Upload,
-  Lock,
   Film,
   Video as VideoIcon,
   Play,
-  Clock
+  Clock,
+  Camera,
+  Loader2
 } from 'lucide-react';
+import { uploadImageToR2 } from '../utils/r2Upload';
 
 interface PersonDetailDrawerProps {
   person: Person | null;
@@ -31,6 +33,7 @@ interface PersonDetailDrawerProps {
   onClose: () => void;
   onSelectPerson: (person: Person) => void;
   onEditPerson: (person: Person) => void;
+  onSavePerson?: (person: Person) => void;
   onAddChild: (parent: Person) => void;
   onAddParent?: (child: Person) => void;
   onOpenAddRelative?: (person: Person) => void;
@@ -49,6 +52,7 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
   onClose,
   onSelectPerson,
   onEditPerson,
+  onSavePerson,
   onAddChild,
   onAddParent,
   onOpenAddRelative,
@@ -56,6 +60,30 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
   onDeletePerson,
   onUnauthorizedEditAttempt,
 }) => {
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
+
+  const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !person) return;
+    setIsUploadingPhoto(true);
+    try {
+      const result = await uploadImageToR2(file, { folder: 'avatars' });
+      if (result.success && result.url) {
+        const updated = { ...person, photoUrl: result.url };
+        if (onSavePerson) {
+          onSavePerson(updated);
+        }
+        onSelectPerson(updated);
+      }
+    } catch (err) {
+      console.warn("Avatar yuklashda xato:", err);
+    } finally {
+      setIsUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
   // Loading skeleton while data is being fetched from Supabase
   if (isLoading) {
     return (
@@ -213,7 +241,22 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Person Hero Info */}
             <div className="flex items-start gap-4">
-              <div className="relative group/photo flex-shrink-0">
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoSelected}
+                className="hidden"
+              />
+              <div
+                className={`relative group/photo flex-shrink-0 ${canEdit ? 'cursor-pointer' : ''}`}
+                onClick={() => {
+                  if (canEdit && !isUploadingPhoto) {
+                    photoInputRef.current?.click();
+                  }
+                }}
+                title={canEdit ? "Rasmni o'zgartirish uchun bosing" : undefined}
+              >
                 {person.avatarVideoUrl ? (
                   <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md bg-black">
                     <video
@@ -234,26 +277,30 @@ export const PersonDetailDrawer: React.FC<PersonDetailDrawerProps> = ({
                     src={person.photoUrl}
                     alt={person.name}
                     referrerPolicy="no-referrer"
-                    className="w-20 h-20 rounded-2xl object-cover border-2 border-slate-200 dark:border-slate-700 shadow-md"
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-slate-200 dark:border-slate-700 shadow-md transition-all group-hover/photo:brightness-90"
                   />
                 ) : (
                   <div
                     className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${
                       person.avatarColor || (isMale ? 'from-sky-500 to-indigo-700' : 'from-rose-400 to-pink-600')
-                    } flex items-center justify-center text-white font-extrabold text-2xl shadow-md`}
+                    } flex items-center justify-center text-white font-extrabold text-2xl shadow-md transition-all group-hover/photo:brightness-90`}
                   >
                     {person.name.charAt(0)}
                   </div>
                 )}
 
-                {canEdit && (
-                  <button
-                    onClick={() => onEditPerson(person)}
-                    title="Rasm yoki Video avatarni o'zgartirish"
-                    className="absolute -bottom-1 -right-1 p-1.5 bg-emerald-600 text-white rounded-lg shadow-md hover:bg-emerald-700 transition-colors"
-                  >
-                    <Upload className="w-3 h-3" />
-                  </button>
+                {/* Uploading indicator */}
+                {isUploadingPhoto && (
+                  <div className="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center text-white backdrop-blur-xs">
+                    <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+                  </div>
+                )}
+
+                {/* Camera icon hover overlay for canEdit */}
+                {canEdit && !isUploadingPhoto && (
+                  <div className="absolute inset-0 bg-black/40 rounded-2xl opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-white">
+                    <Camera className="w-5 h-5 text-white drop-shadow" />
+                  </div>
                 )}
               </div>
 

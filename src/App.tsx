@@ -832,7 +832,7 @@ export default function App() {
       {/* Person Detail Drawer */}
       {(selectedPerson || isDataLoading) && (
         <PersonDetailDrawer
-          person={selectedPerson}
+          person={state.people[selectedPerson.id] || selectedPerson}
           people={state.people}
           meId={state.meId}
           activePerspectiveId={state.activePerspectiveId}
@@ -841,6 +841,7 @@ export default function App() {
           onClose={() => setSelectedPerson(null)}
           onSelectPerson={(p) => setSelectedPerson(p)}
           onEditPerson={handleEditPerson}
+          onSavePerson={handleSavePerson}
           onAddChild={handleAddChild}
           onAddParent={handleAddParent}
           onOpenAddRelative={handleOpenAddRelative}
@@ -852,6 +853,7 @@ export default function App() {
 
       {/* Edit / Add Relative Modal */}
       <EditPersonModal
+        key={isEditModalOpen ? `${personToEdit?.id || 'new'}_${targetRelationType || ''}_${initialGenderForModal || ''}` : 'closed'}
         isOpen={isEditModalOpen}
         onClose={() => {
           setIsEditModalOpen(false);
