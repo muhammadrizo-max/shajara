@@ -1,17 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { Person } from '../types';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
+import html2canvas from 'html2canvas';
 import { 
   Printer, 
   X, 
   Download, 
   Check, 
-  Sliders, 
   Sparkles, 
   Calendar, 
-  Users, 
   FileText,
-  Palette
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 
 interface PrintTreeModalProps {
@@ -34,6 +34,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
   const [includePhotos, setIncludePhotos] = useState(true);
   const [includeDates, setIncludeDates] = useState(true);
   const [themeStyle, setThemeStyle] = useState<'classic-gold' | 'emerald' | 'monochrome'>('classic-gold');
+  const [isExporting, setIsExporting] = useState<string | null>(null);
   const printAreaRef = useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
@@ -55,21 +56,54 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
     .sort((a, b) => a - b);
 
   const getGenerationTitle = (gen: number) => {
-    const titles: Record<number, string> = {
-      1: "1-Pusht: Katta Bobokalon",
-      2: "2-Pusht: Bobokalon",
-      3: "3-Pusht: Katta Bobo",
-      4: "4-Pusht: Bobo",
-      5: "5-Pusht: Ota",
-      6: "6-Pusht: O'g'il / Qiz",
-      7: "7-Pusht: Nabira",
-      8: "8-Pusht: Evara",
-      9: "9-Pusht: Chevara"
-    };
-    return titles[gen] || `${gen}-Avlod`;
+    const minGen = sortedGens[0] || 1;
+    const diff = gen - minGen;
+
+    if (diff === 0) return `${gen}-Pusht: Bosh ajdod (Ildiz)`;
+    if (diff === 1) return `${gen}-Pusht: Ota-onalar avlodi`;
+    if (diff === 2) return `${gen}-Pusht: Farzandlar va vorislar`;
+    if (diff === 3) return `${gen}-Pusht: Nabiralar avlodi`;
+    if (diff === 4) return `${gen}-Pusht: Evaralar avlodi`;
+    return `${gen}-Pusht avlodlari`;
   };
 
   const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportImage = async (format: 'png' | 'jpeg') => {
+    if (!printAreaRef.current) return;
+    setIsExporting(format);
+
+    try {
+      const element = printAreaRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2, // High resolution for crystal clear print quality
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+      const dataUrl = canvas.toDataURL(mimeType, 0.95);
+
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `Shajarachi_Nasabnoma_${dateStr}.${format === 'png' ? 'png' : 'jpg'}`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error('[Export Image Error]:', err);
+      window.alert("Rasm tayyorlashda xatolik yuz berdi. Iltimos, «Chop etish» tugmasidan foydalaning.");
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
+  const handleSavePdf = () => {
     window.print();
   };
 
@@ -114,13 +148,13 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>Chop etish uchun versiya (A4 Landscape)</span>
+                <span>Chop etish va saqlash (A4 Landscape)</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-semibold">
-                  PDF / Qog'oz
+                  PNG • JPG • PDF • Qog'oz
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                A4 varaqqa to'liq moslangan shajara albomi va nasabnoma sertifikati
+                Rasmiy muhrlangan nasabnoma va shajara sertifikati
               </p>
             </div>
           </div>
@@ -130,7 +164,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
             {/* Fotosuratlarni yoqish/o'chirish */}
             <button
               onClick={() => setIncludePhotos(!includePhotos)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-colors cursor-pointer ${
                 includePhotos 
                   ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700' 
                   : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -144,41 +178,88 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
             <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl text-xs">
               <button
                 onClick={() => setThemeStyle('classic-gold')}
-                className={`px-2 py-1 rounded-lg ${themeStyle === 'classic-gold' ? 'bg-amber-600 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2 py-1 rounded-lg transition cursor-pointer ${themeStyle === 'classic-gold' ? 'bg-amber-600 text-white font-bold' : 'text-slate-400'}`}
                 title="Klassik zarhalli naqsh"
               >
                 Klassik
               </button>
               <button
                 onClick={() => setThemeStyle('emerald')}
-                className={`px-2 py-1 rounded-lg ${themeStyle === 'emerald' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2 py-1 rounded-lg transition cursor-pointer ${themeStyle === 'emerald' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
                 title="Zumrad yashil"
               >
                 Zumrad
               </button>
               <button
                 onClick={() => setThemeStyle('monochrome')}
-                className={`px-2 py-1 rounded-lg ${themeStyle === 'monochrome' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2 py-1 rounded-lg transition cursor-pointer ${themeStyle === 'monochrome' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'}`}
                 title="Qora-oq (Siyoh tejash)"
               >
                 Oq-qora
               </button>
             </div>
 
-            {/* Asosiy Chop Etish Tugmasi */}
-            <button
-              onClick={handlePrint}
-              id="btn-trigger-print"
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Chop etish / PDF saqlash</span>
-            </button>
+            {/* 4 Ta Alohida Yuklab Olish / Chop Etish Tugmalari */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* 1. 🖨️ Chop etish */}
+              <button
+                onClick={handlePrint}
+                id="btn-trigger-print"
+                title="Printerda to'g'ridan-to'g'ri chop etish"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                <span>Chop etish</span>
+              </button>
+
+              {/* 2. 📥 PNG rasm yuklab olish */}
+              <button
+                onClick={() => handleExportImage('png')}
+                disabled={isExporting !== null}
+                id="btn-download-png"
+                title="Yuqori sifatli tiniq PNG formatda yuklab olish"
+                className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isExporting === 'png' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="w-3.5 h-3.5" />
+                )}
+                <span>PNG yuklab olish</span>
+              </button>
+
+              {/* 3. 📥 JPG rasm yuklab olish */}
+              <button
+                onClick={() => handleExportImage('jpeg')}
+                disabled={isExporting !== null}
+                id="btn-download-jpg"
+                title="Kichik hajmli JPG formatda yuklab olish"
+                className="px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isExporting === 'jpeg' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>JPG yuklab olish</span>
+              </button>
+
+              {/* 4. 📄 PDF saqlash */}
+              <button
+                onClick={handleSavePdf}
+                id="btn-save-pdf"
+                title="A4 landscape PDF fayl sifatida saqlash"
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>PDF saqlash</span>
+              </button>
+            </div>
 
             {/* Yopish */}
             <button
               onClick={onClose}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -192,7 +273,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
           <div
             ref={printAreaRef}
             id="print-document-area"
-            className={`w-full max-w-5xl bg-white text-slate-900 rounded-2xl shadow-xl p-8 sm:p-10 border-4 transition-all relative ${
+            className={`w-full max-w-5xl bg-white text-slate-900 rounded-2xl shadow-xl p-8 sm:p-10 border-4 transition-all relative overflow-hidden ${
               themeStyle === 'classic-gold'
                 ? 'border-amber-700/80 bg-gradient-to-b from-amber-50/30 via-white to-amber-50/20'
                 : themeStyle === 'emerald'
@@ -200,27 +281,41 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
                 : 'border-slate-800 bg-white'
             }`}
           >
+            {/* Suv belgisi (Watermark background pattern) */}
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.035] select-none z-0">
+              <div className="transform -rotate-12 flex flex-col items-center">
+                <img
+                  src="/assets/aistudio/file_00000000699481f4bf9593e1e840b793_190c7202.png"
+                  alt="Watermark"
+                  className="w-96 h-96 object-contain"
+                />
+                <span className="text-4xl font-serif font-black tracking-widest text-slate-950 mt-4">
+                  ShajaraChi.uz • NASABNOMA
+                </span>
+              </div>
+            </div>
+
             {/* O'zbek milliy o'yma naqsh burchaklari (Traditional Uzbek Corners) */}
-            <div className="absolute top-2 left-2 w-10 h-10 border-t-2 border-l-2 border-amber-800 pointer-events-none opacity-60"></div>
-            <div className="absolute top-2 right-2 w-10 h-10 border-t-2 border-r-2 border-amber-800 pointer-events-none opacity-60"></div>
-            <div className="absolute bottom-2 left-2 w-10 h-10 border-b-2 border-l-2 border-amber-800 pointer-events-none opacity-60"></div>
-            <div className="absolute bottom-2 right-2 w-10 h-10 border-b-2 border-r-2 border-amber-800 pointer-events-none opacity-60"></div>
+            <div className="absolute top-2 left-2 w-10 h-10 border-t-2 border-l-2 border-amber-800 pointer-events-none opacity-60 z-10"></div>
+            <div className="absolute top-2 right-2 w-10 h-10 border-t-2 border-r-2 border-amber-800 pointer-events-none opacity-60 z-10"></div>
+            <div className="absolute bottom-2 left-2 w-10 h-10 border-b-2 border-l-2 border-amber-800 pointer-events-none opacity-60 z-10"></div>
+            <div className="absolute bottom-2 right-2 w-10 h-10 border-b-2 border-r-2 border-amber-800 pointer-events-none opacity-60 z-10"></div>
 
             {/* A4 Header: Gerb, Logotip va Sarlavha */}
-            <div className="flex items-center justify-between pb-6 border-b-2 border-amber-800/40 gap-4">
+            <div className="relative z-10 flex items-center justify-between pb-6 border-b-2 border-amber-800/40 gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-emerald-50 border-2 border-emerald-600/40 p-1 flex items-center justify-center shadow-sm flex-shrink-0">
                   <FamilyTreeLogo className="w-12 h-12" />
                 </div>
                 <div>
                   <span className="text-[10px] uppercase tracking-widest font-extrabold text-amber-800">
-                    O'zbekiston Milliy Nasabnomasi
+                    O'zbekiston Milliy Nasabnomasi • Shajarachi.uz
                   </span>
                   <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-serif">
                     {treeTitle}
                   </h1>
                   <p className="text-xs text-slate-600 font-medium mt-0.5">
-                    Asoschi / Katta bobo: <strong className="text-amber-900">{rootPerson?.name} {rootPerson?.surname || ''}</strong> • Jami: <strong>{peopleList.length} nafar ajdod va avlodlar</strong>
+                    Bosh ajdod: <strong className="text-amber-900">{rootPerson?.name} {rootPerson?.surname || ''}</strong> • Jami: <strong>{peopleList.length} nafar ajdod va avlodlar</strong>
                   </p>
                 </div>
               </div>
@@ -240,14 +335,14 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
             </div>
 
             {/* 7 Ajdod shiori / O'git */}
-            <div className="my-5 p-3 rounded-xl bg-amber-50/60 border border-amber-200/80 text-center">
+            <div className="relative z-10 my-5 p-3 rounded-xl bg-amber-50/60 border border-amber-200/80 text-center">
               <p className="text-xs italic font-serif text-amber-950 font-semibold">
                 «Yetti pushtini bilgan yigit yetti elning g'amini yer, o'z nasabini bilmagan odam ildizsiz daraxt kabidir.»
               </p>
             </div>
 
             {/* Avlodlar Bo'yicha Ierarxik Ko'rinish (A4 Landscape Grid) */}
-            <div className="space-y-6 pt-2">
+            <div className="relative z-10 space-y-6 pt-2">
               {sortedGens.map((gen) => {
                 const persons = generationsMap[gen] || [];
                 return (
@@ -259,43 +354,49 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
                       </span>
                       <div className="flex-1 h-[1.5px] bg-gradient-to-r from-amber-700/50 via-slate-300 to-transparent"></div>
                       <span className="text-[10px] text-slate-500 font-bold">
-                        {persons.length} nafar shaxs
+                        {persons.length} nafar
                       </span>
                     </div>
 
-                    {/* Shaxslar Kartochkalari Qatori */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                    {/* Avlod Kartochkalari */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {persons.map((person) => {
-                        const isMale = person.gender === 'male';
                         const parent = person.parentId ? people[person.parentId] : null;
+                        const isUserMe = person.id === meId;
 
                         return (
                           <div
                             key={person.id}
-                            className={`p-2.5 rounded-xl border transition-all text-left flex flex-col justify-between ${
-                              isMale 
-                                ? 'bg-sky-50/50 border-sky-200 text-slate-900' 
-                                : 'bg-rose-50/50 border-rose-200 text-slate-900'
+                            className={`p-3 rounded-xl border-2 transition-all flex flex-col justify-between relative ${
+                              isUserMe
+                                ? 'border-emerald-600 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/30'
+                                : person.gender === 'male'
+                                ? 'border-slate-300 bg-white'
+                                : 'border-rose-300/80 bg-rose-50/20'
                             }`}
                           >
-                            <div className="flex items-start gap-2">
-                              {/* Rasm / Avatar */}
+                            {/* Card Content */}
+                            <div className="flex items-start gap-2.5">
+                              {/* Fotosurat yoki Avatar */}
                               {includePhotos && (
-                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-300 flex-shrink-0 bg-slate-200 flex items-center justify-center font-bold text-xs text-slate-700">
+                                <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
                                   {person.photoUrl ? (
                                     <img
                                       src={person.photoUrl}
                                       alt={person.name}
                                       className="w-full h-full object-cover"
+                                      crossOrigin="anonymous"
                                     />
                                   ) : (
-                                    <span>{person.name.charAt(0)}</span>
+                                    <div className="w-full h-full bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-white text-xs font-bold">
+                                      {person.name.charAt(0)}
+                                    </div>
                                   )}
                                 </div>
                               )}
 
                               <div className="min-w-0 flex-1">
-                                <div className="font-bold text-xs text-slate-900 truncate leading-snug">
+                                <div className="text-xs font-bold text-slate-900 truncate">
                                   {person.name}
                                 </div>
                                 {person.surname && (
@@ -339,28 +440,32 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
               })}
             </div>
 
-            {/* A4 Footer: Muhr va Imzo Joyi */}
-            <div className="mt-10 pt-6 border-t-2 border-amber-800/40 flex items-end justify-between text-xs text-slate-600">
+            {/* A4 Footer: Muhr va Imzo Joyi (Shajara egasi) */}
+            <div className="relative z-10 mt-10 pt-6 border-t-2 border-amber-800/40 flex items-end justify-between text-xs text-slate-600">
               <div>
-                <div className="font-bold text-slate-800">Oila Boshlig'i & Muallif:</div>
-                <div className="text-[11px] text-slate-600 mt-0.5">
-                  {me ? `${me.name} ${me.surname || ''}` : rootPerson?.name}
+                <div className="font-bold text-slate-800 text-sm">Shajara egasi:</div>
+                <div className="text-xs text-slate-700 font-semibold mt-0.5">
+                  {me ? `${me.name} ${me.surname || ''}` : `${rootPerson?.name} ${rootPerson?.surname || ''}`}
                 </div>
                 <div className="text-[9px] text-slate-400 mt-1">
-                  Ushbu shajara 7 Ajdod Shajarasi ilovasi orqali shakllantirildi.
+                  Ushbu shajara «Shajarachi.uz» milliy tizimi orqali shakllantirildi va tasdiqlandi.
                 </div>
               </div>
 
               {/* Rasmiy Muhr va Imzo ramzi */}
               <div className="flex items-center gap-6">
                 <div className="text-center">
-                  <div className="w-24 border-b border-slate-400 mb-1"></div>
-                  <span className="text-[9px] text-slate-400 uppercase">Imzo</span>
+                  <div className="w-28 border-b-2 border-slate-400 mb-1"></div>
+                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Shaxsiy Imzo</span>
                 </div>
-                <div className="w-16 h-16 rounded-full border-2 border-dashed border-amber-800 flex items-center justify-center text-center p-1 opacity-70">
-                  <span className="text-[8px] font-bold text-amber-900 leading-tight">
-                    NASABNOMA MUHRI
-                  </span>
+                
+                {/* 2-rasmdagi Haqiqiy ko'k dumaloq rasmiy muhr */}
+                <div className="flex flex-col items-center">
+                  <img
+                    src="/assets/aistudio/file_00000000699481f4bf9593e1e840b793_190c7202.png"
+                    alt="NASABNOMA - Oila Shajarasi - ShajaraChi.uz Rasmiy Muhri"
+                    className="w-20 h-20 sm:w-24 sm:h-24 object-contain shadow-xs transform rotate-[-4deg]"
+                  />
                 </div>
               </div>
             </div>

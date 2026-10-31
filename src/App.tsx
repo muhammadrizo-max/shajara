@@ -3,6 +3,8 @@ import { AuthUser, FamilyTreeState, Gender, Person, ViewMode } from './types';
 import { 
   loadFamilyTreeState, 
   saveFamilyTreeState, 
+  fetchTreeFromCloud,
+  saveTreeToCloud,
   exportStateAsJSON, 
   importStateFromJSON,
   clearAllShajaraData
@@ -253,6 +255,31 @@ export default function App() {
     }
   }, [state]);
 
+  // Telefon va Kompyuter o'rtasida shajarani avtomatik sinxronlash (Cross-device Cloud Sync)
+  useEffect(() => {
+    const session = getCurrentSessionUser();
+    if (session?.id || session?.email) {
+      fetchTreeFromCloud(session.id, session.email).then((cloudTree) => {
+        if (cloudTree && cloudTree.people && Object.keys(cloudTree.people).length > 0) {
+          setState((prev) => {
+            const currentCount = Object.keys(prev.people).length;
+            const cloudCount = Object.keys(cloudTree.people).length;
+            // Agar serverda ko'proq a'zo bo'lsa (boshqa qurilmadan kiritilgan)
+            if (cloudCount > currentCount || currentCount <= 1) {
+              saveFamilyTreeState(cloudTree, session.id);
+              return {
+                ...prev,
+                ...cloudTree,
+                currentUser: prev.currentUser || session,
+              };
+            }
+            return prev;
+          });
+        }
+      }).catch((e) => console.warn('[Cloud Sync] startup fetch xatolik:', e));
+    }
+  }, []);
+
   // Hydrate video & media URLs from IndexedDB on startup
   useEffect(() => {
     hydrateAllMediaUrls().then((mediaMap) => {
@@ -326,8 +353,20 @@ export default function App() {
       userTree = loadFamilyTreeState(user.id);
     }
 
+    // 2.1 Server/Cloud bazasidan sinxronlash (Telefon <-> Kompyuter o'rtasida shajara bir xil bo'lishi uchun)
+    if (!userTree || Object.keys(userTree.people).length === 0) {
+      try {
+        const cloudTree = await fetchTreeFromCloud(user.id, user.email);
+        if (cloudTree && cloudTree.people && Object.keys(cloudTree.people).length > 0) {
+          userTree = cloudTree;
+        }
+      } catch (cloudErr) {
+        console.warn("[Cloud Sync] Serverdan shajara yuklanmadi:", cloudErr);
+      }
+    }
+
     // 3. Agar foydalanuvchining shajarasi bo'sh bo'lsa (Object.keys(loadedTree.people).length === 0), foydalanuvchining o'zini birinchi tugun (Root Person - Shajara Egasi) qilib yarating va saqlang:
-    if (Object.keys(userTree.people).length === 0) {
+    if (!userTree || Object.keys(userTree.people).length === 0) {
       const newPersonId = `p_${Date.now()}`;
       const newPerson: Person = {
         id: newPersonId,
@@ -337,7 +376,7 @@ export default function App() {
         parentId: null,
         generation: 1,
         isAlive: true,
-        occupation: "Oila boshlig'i (Shajara egasi)",
+        occupation: "Shajara egasi",
         avatarColor: initialPersonData?.gender === 'female' ? 'from-rose-500 to-pink-700' : 'from-emerald-600 to-teal-800',
         notes: "Shajara asoschisi",
       };
@@ -351,6 +390,7 @@ export default function App() {
         meId: newPersonId,
         currentUser: updatedUser,
         activePerspectiveId: undefined,
+        familyName: `${user.name} shajarasi`,
       };
       setState(newState);
       saveFamilyTreeState(newState, user.id);
@@ -370,6 +410,7 @@ export default function App() {
       const updatedUser: AuthUser = {
         ...user,
         personId: user.personId || userTree.meId || undefined,
+        role: user.role || 'owner',
       };
       setCurrentSessionUser(updatedUser);
 
@@ -379,7 +420,7 @@ export default function App() {
       };
       setState(newState);
       saveFamilyTreeState(newState, user.id);
-      showToast(`Xush kelibsiz, ${user.name}!`);
+      showToast(`Xush kelibsiz, ${user.name}! Shajarangiz yuklandi.`);
     }
 
     setViewMode('tree');
@@ -489,53 +530,76 @@ export default function App() {
   };
 
   const handleDeletePerson = (personId: string) => {
-    const person = state.people[personId];
-    // Cannot delete own profile
-    if (state.currentUser?.personId === personId) {
-      showToast("O'z profilingizni shajaradan o'chira olmaysiz!", "warn");
+    const totalCount = Object.keys(state.people).length;
+    if (totalCount <= 1) {
+      showToast("Shajarada kamida 1 kishi bo'lishi shart! Oxirgi shaxsni o'chira olmaysiz.", "warn");
       return;
     }
 
-    const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Oila a\'zosi';
+    const person = state.people[personId];
+    const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Shajara egasi';
 
     setState((prev) => {
-      // Find all descendants recursively
-      const idsToDelete = new Set<string>();
-      const findDescendants = (id: string) => {
-        idsToDelete.add(id);
-        (Object.values(prev.people) as Person[]).forEach((p) => {
-          if (p.parentId === id) {
-            findDescendants(p.id);
-          }
-        });
-      };
-      findDescendants(personId);
-
       const newPeople = { ...prev.people };
-      idsToDelete.forEach((id) => delete newPeople[id]);
+      delete newPeople[personId];
 
+      // O'chirilgan shaxsga ishora qiluvchi barcha rishtalarni tozalash (parentId, motherId, spouseId)
+      Object.keys(newPeople).forEach((k) => {
+        const p = newPeople[k];
+        let changed = false;
+        let updatedP = { ...p };
+
+        if (p.parentId === personId) {
+          updatedP.parentId = null;
+          changed = true;
+        }
+        if (p.motherId === personId) {
+          updatedP.motherId = null;
+          updatedP.motherName = undefined;
+          changed = true;
+        }
+        if (p.spouseId === personId) {
+          updatedP.spouseId = undefined;
+          updatedP.spouseName = undefined;
+          changed = true;
+        }
+        if (changed) {
+          newPeople[k] = updatedP;
+        }
+      });
+
+      const recomputed = recalculateAllGenerations(newPeople);
       let newMeId = prev.meId;
-      if (idsToDelete.has(prev.meId)) {
-        newMeId = Object.keys(newPeople)[0] || DEFAULT_ME_ID;
+      if (prev.meId === personId || !recomputed[newMeId]) {
+        newMeId = Object.keys(recomputed)[0] || '';
       }
+      const newRootId = findRootAncestorId(newMeId, recomputed);
 
-      return {
+      const newState: FamilyTreeState = {
         ...prev,
-        people: newPeople,
+        people: recomputed,
+        rootId: newRootId,
         meId: newMeId,
       };
+
+      saveFamilyTreeState(newState, prev.currentUser?.id);
+      return newState;
     });
 
     // Audit log
     addHistoryRecord({
       action: 'person_delete',
       actorName,
-      personName: person?.name || 'Shaxs',
+      personName: person ? `${person.name} ${person.surname || ''}`.trim() : 'Shaxs',
       title: "Shaxs shajaradan o'chirildi",
-      description: `${actorName} tomonidan «${person?.name || 'Shaxs'}» va uning shoxlari o'chirildi.`,
+      description: `${actorName} tomonidan «${person?.name || 'Shaxs'}» shajaradan o'chirildi.`,
     });
 
-    showToast("Shaxs va uning shoxlari shajaradan o'chirildi.");
+    if (selectedPerson?.id === personId) {
+      setSelectedPerson(null);
+    }
+    setIsEditModalOpen(false);
+    showToast(`«${person?.name || 'Shaxs'}» shajaradan o'chirildi.`);
   };
 
   const handleOpenAddRelative = (person: Person) => {
@@ -881,6 +945,7 @@ export default function App() {
         people={state.people}
         onSave={handleSavePerson}
         onSaveWithRelation={handleSavePersonWithRelation}
+        onDelete={handleDeletePerson}
       />
 
       {/* Qarindosh tanlash modali (+ Ota, Ona, Turmush o'rtoq, O'g'il, Qiz farzand) */}

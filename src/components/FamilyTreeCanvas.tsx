@@ -420,6 +420,17 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     const hasChildren = children.length > 0;
     const isExpanded = !collapsedIds.has(person.id) && (!spouse || !collapsedIds.has(spouse.id));
 
+    // Detect if this is a single parent (e.g. Bobo) with exactly one child that is married (e.g. Muxiddin + Gulchehraxon)
+    const singleChild = children.length === 1 ? children[0] : null;
+    const singleChildSpouseId = singleChild 
+      ? (singleChild.spouseId || allPeopleList.find((o) => o.spouseId === singleChild.id)?.id)
+      : null;
+    const singleChildSpouse = singleChildSpouseId ? people[singleChildSpouseId] : null;
+    const isSingleChildWithSpouse = !spouse && Boolean(singleChildSpouse);
+    const isSingleChildLeftInCouple = singleChild 
+      ? (singleChild.gender === 'male' || (singleChild.parentId && !singleChildSpouse?.parentId))
+      : true;
+
     return (
       <div key={person.id} className="flex flex-col items-center relative">
         {/* Node Card / Couple Unit */}
@@ -486,6 +497,36 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 />
               </div>
             </div>
+          ) : isSingleChildWithSpouse ? (
+            /* Single parent (Bobo) aligned directly above biological child (Muxiddin) */
+            <div className="flex items-center justify-center relative">
+              {!isSingleChildLeftInCouple && (
+                <div className="w-72 sm:w-[328px] shrink-0 pointer-events-none" />
+              )}
+              <PersonCard
+                person={person}
+                people={people}
+                meId={meId}
+                activePerspectiveId={activePerspectiveId}
+                currentUser={currentUser}
+                hasChildren={hasChildren}
+                isExpanded={isExpanded}
+                showLifeline={showLifelines}
+                onToggleExpand={() => toggleExpand(person.id)}
+                onSelect={onSelectPerson}
+                onEdit={onEditPerson}
+                onAddChild={onAddChild}
+                onAddParent={onAddParent}
+                onOpenAddRelative={onOpenAddRelative}
+                onSetTemporaryPerspective={onSetTemporaryPerspective}
+                onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
+                isSelected={selectedPersonId === person.id}
+                isHighlighted={isMatch(person)}
+              />
+              {isSingleChildLeftInCouple && (
+                <div className="w-72 sm:w-[328px] shrink-0 pointer-events-none" />
+              )}
+            </div>
           ) : (
             <PersonCard
               person={person}
@@ -513,15 +554,25 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
         {/* Children Branch */}
         {hasChildren && isExpanded && (
           <div className="flex flex-col items-center mt-6 sm:mt-8 relative w-full">
-            {/* Vertical connector line from middle of couple (heart) or single parent card down to children bar */}
-            <div className="w-0.5 h-7 sm:h-8 bg-gradient-to-b from-rose-400 via-emerald-500 to-slate-400 dark:to-slate-600 rounded-full" />
+            {/* Vertical connector line from middle of couple (heart) or single parent card down to children */}
+            {isSingleChildWithSpouse ? (
+              <div 
+                className="w-0.5 h-7 sm:h-8 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full absolute -top-0"
+                style={{
+                  left: isSingleChildLeftInCouple ? '128px' : 'calc(100% - 128px)',
+                  transform: 'translateX(-50%)',
+                }}
+              />
+            ) : (
+              <div className="w-0.5 h-7 sm:h-8 bg-gradient-to-b from-rose-400 via-emerald-500 to-slate-400 dark:to-slate-600 rounded-full" />
+            )}
 
             {/* Branch to children */}
             <div className="flex items-start justify-center gap-8 sm:gap-10 relative pt-4">
-              {/* Rounded/curved horizontal connector bar across children */}
+              {/* Rounded/curved horizontal connector bar across multiple children */}
               {children.length > 1 && (
                 <div
-                  className="absolute top-0 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full"
+                  className="absolute top-0 h-0.5 bg-gradient-to-r from-emerald-500/80 via-teal-500 to-emerald-500/80 rounded-full shadow-xs"
                   style={{
                     left: 'calc(132px)',
                     right: 'calc(132px)',
@@ -534,7 +585,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 const childSpouseId = child.spouseId || allPeopleList.find((other) => other.spouseId === child.id)?.id;
                 const childSpouse = childSpouseId ? people[childSpouseId] : null;
 
-                // When child is in a couple, ensure incoming line lands on child's card
+                // When child is in a couple, incoming branch lands directly on child's card
                 const isChildLeftInCouple = child.gender === 'male' || (child.parentId && !childSpouse?.parentId);
                 const topConnectorStyle: React.CSSProperties = childSpouse
                   ? { left: isChildLeftInCouple ? '128px' : 'calc(100% - 128px)', transform: 'translateX(-50%)' }
@@ -542,9 +593,9 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
                 return (
                   <div key={child.id} className="flex flex-col items-center relative">
-                    {/* Top vertical connector from horizontal bar down to child */}
+                    {/* Top vertical connector from horizontal bar or parent directly down to child */}
                     <div 
-                      className="w-0.5 h-4 bg-slate-300 dark:bg-slate-700 absolute -top-4 rounded-full" 
+                      className="w-0.5 h-4 bg-gradient-to-b from-emerald-500/80 to-slate-400 dark:to-slate-600 absolute -top-4 rounded-full" 
                       style={topConnectorStyle}
                     />
                     {renderTreeNode(child.id, level + 1)}

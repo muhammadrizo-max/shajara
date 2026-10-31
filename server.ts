@@ -6,6 +6,7 @@ import sessionHandler from './api/auth/session';
 import healthHandler from './api/health';
 import presignHandler from './api/upload/presign';
 import contactHandler from './api/contact';
+import treeHandler from './api/tree';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +26,7 @@ async function startServer() {
   app.all('/api/upload/presign', (req, res) => presignHandler(req, res));
   app.all('/api/upload/presigned-url', (req, res) => presignHandler(req, res));
   app.all('/api/contact', (req, res) => contactHandler(req, res));
+  app.all('/api/tree', (req, res) => treeHandler(req, res));
 
   // Development vs Production
   if (process.env.NODE_ENV !== 'production') {

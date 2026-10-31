@@ -127,10 +127,8 @@ export function recalculateAllGenerations(people: Record<string, Person>): Recor
     // Spouse ALWAYS gets the exact same generation
     if (person.spouseId && updated[person.spouseId]) {
       const sp = updated[person.spouseId];
-      if (!visited.has(sp.id)) {
-        visited.add(sp.id);
-        updated[sp.id] = { ...sp, generation: gen };
-      }
+      updated[sp.id] = { ...sp, generation: gen };
+      visited.add(sp.id);
     }
 
     // Children are those with parentId or motherId of this person (or spouse)
@@ -156,6 +154,20 @@ export function recalculateAllGenerations(people: Record<string, Person>): Recor
   for (const p of Object.values(updated)) {
     if (!visited.has(p.id)) {
       assignGen(p.id, 1, visited);
+    }
+  }
+
+  // 3. Post-pass: Turmush o'rtoqlar 100% bir xil pushtda (avlodda) bo'lishini kafolatlaymiz (masalan, Ota va Ona ikkalasi ham 2-pusht)
+  for (const p of Object.values(updated)) {
+    if (p.spouseId && updated[p.spouseId]) {
+      const sp = updated[p.spouseId];
+      const maxGen = Math.max(p.generation || 1, sp.generation || 1);
+      if (p.generation !== maxGen) {
+        updated[p.id] = { ...p, generation: maxGen };
+      }
+      if (sp.generation !== maxGen) {
+        updated[sp.id] = { ...sp, generation: maxGen };
+      }
     }
   }
 

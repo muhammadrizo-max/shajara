@@ -37,11 +37,57 @@ export function loadFamilyTreeState(userId?: string | null): FamilyTreeState {
   };
 }
 
+export async function fetchTreeFromCloud(userId?: string | null, email?: string | null): Promise<FamilyTreeState | null> {
+  if (!userId && !email) return null;
+  try {
+    const params = new URLSearchParams();
+    if (userId) params.append('userId', userId);
+    if (email) params.append('email', email);
+    const res = await fetch(`/api/tree?${params.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.state && data.state.people && Object.keys(data.state.people).length > 0) {
+        return data.state as FamilyTreeState;
+      }
+    }
+  } catch (e) {
+    console.warn('[Cloud Sync] fetchTreeFromCloud xatolik:', e);
+  }
+  return null;
+}
+
+export async function saveTreeToCloud(state: FamilyTreeState, userId?: string | null, email?: string | null): Promise<boolean> {
+  const targetUserId = userId || state.currentUser?.id;
+  const targetEmail = email || state.currentUser?.email;
+  if (!targetUserId && !targetEmail) return false;
+
+  try {
+    const res = await fetch('/api/tree', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: targetUserId,
+        email: targetEmail,
+        state,
+      }),
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('[Cloud Sync] saveTreeToCloud xatolik:', e);
+    return false;
+  }
+}
+
 export function saveFamilyTreeState(state: FamilyTreeState, userId?: string | null): void {
   try {
     const targetUserId = userId || state.currentUser?.id;
     const key = getUserTreeStorageKey(targetUserId);
     localStorage.setItem(key, JSON.stringify(state));
+
+    // Cloudga ham fon rejimida saqlash (Phone <-> PC sinxronlash)
+    if (targetUserId || state.currentUser?.email) {
+      saveTreeToCloud(state, targetUserId, state.currentUser?.email).catch(() => {});
+    }
   } catch (err) {
     console.error('Failed to save user shajara state:', err);
   }

@@ -29,6 +29,7 @@ interface EditPersonModalProps {
   people: Record<string, Person>;
   onSave: (person: Person) => void;
   onSaveWithRelation?: (newPerson: Person, relatedPerson?: Person) => void;
+  onDelete?: (personId: string) => void;
 }
 
 const AVATAR_GRADIENTS = [
@@ -54,6 +55,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   people,
   onSave,
   onSaveWithRelation,
+  onDelete,
 }) => {
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +78,8 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [parentId, setParentId] = useState<string | null>(
     personToEdit ? personToEdit.parentId : parentForNewChild ? parentForNewChild.id : null
   );
+  const [motherId, setMotherId] = useState<string | null>(personToEdit?.motherId || null);
+  const [spouseId, setSpouseId] = useState<string | null>(personToEdit?.spouseId || null);
   const [isNoFatherSelected, setIsNoFatherSelected] = useState<boolean>(false);
 
   // Date and Life status
@@ -120,6 +124,8 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       setSurname(personToEdit.surname || '');
       setGender(personToEdit.gender || 'male');
       setParentId(personToEdit.parentId ?? null);
+      setMotherId(personToEdit.motherId ?? null);
+      setSpouseId(personToEdit.spouseId ?? null);
       setIsNoFatherSelected(personToEdit.parentId === null);
       setIsAlive(personToEdit.isAlive !== false);
       const onlyYr = Boolean(!personToEdit.birthDate && personToEdit.birthYear);
@@ -137,6 +143,8 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       // Adding new relative
       setName('');
       setSurname('');
+      setMotherId(null);
+      setSpouseId(null);
 
       // Auto gender by relation type:
       let targetGender: Gender = 'male';
@@ -225,6 +233,18 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       (p) => !invalidParentIds.has(p.id) && (p.gender === 'male' || !p.gender)
     );
   }, [people, invalidParentIds]);
+
+  const availableMothers = React.useMemo(() => {
+    return (Object.values(people) as Person[]).filter(
+      (p) => !invalidParentIds.has(p.id) && p.id !== personToEdit?.id && (p.gender === 'female' || !p.gender)
+    );
+  }, [people, invalidParentIds, personToEdit]);
+
+  const availableSpouses = React.useMemo(() => {
+    return (Object.values(people) as Person[]).filter(
+      (p) => p.id !== personToEdit?.id && p.id !== parentId && p.id !== motherId
+    );
+  }, [people, personToEdit, parentId, motherId]);
 
   if (!isOpen) return null;
 
@@ -321,6 +341,10 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       surname: surname.trim() || undefined,
       gender,
       parentId: isNoFatherSelected ? null : parentId,
+      motherId: motherId || undefined,
+      motherName: motherId && people[motherId] ? `${people[motherId].name} ${people[motherId].surname || ''}`.trim() : undefined,
+      spouseId: spouseId || undefined,
+      spouseName: spouseId && people[spouseId] ? `${people[spouseId].name} ${people[spouseId].surname || ''}`.trim() : undefined,
       birthDate: !onlyYearKnown && birthDate.trim() ? birthDate.trim() : undefined,
       birthYear: effectiveBirthYear || undefined,
       deathYear: !isAlive ? (deathYear.trim() || undefined) : undefined,
@@ -789,6 +813,49 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
             )}
           </div>
 
+          {/* Shajaradagi onasi va Turmush o'rtog'i (Munosabatlarni tahrirlash) */}
+          {isEditing && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+              {/* Onasi */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Shajaradagi onasi
+                </label>
+                <select
+                  value={motherId || ''}
+                  onChange={(e) => setMotherId(e.target.value || null)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="">Onasi belgilanmasin</option>
+                  {availableMothers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.surname || ''} — {p.generation}-pusht
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Turmush o'rtog'i */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Turmush o'rtog'i
+                </label>
+                <select
+                  value={spouseId || ''}
+                  onChange={(e) => setSpouseId(e.target.value || null)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="">Turmush o'rtog'i yo'q</option>
+                  {availableSpouses.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.surname || ''} ({p.gender === 'female' ? 'Ayol' : 'Erkak'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* 6. Yashagan joyi va Qisqacha xotiralar */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -819,21 +886,46 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
           </div>
 
           {/* Footer Buttons */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 flex-shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-            >
-              Bekor qilish
-            </button>
-            <button
-              type="submit"
-              id="btn-submit-person-form"
-              className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md hover:shadow transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>{isEditing ? "O'zgarishlarni saqlash" : "Shajaraga qo'shish"}</span>
-            </button>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-shrink-0">
+            {isEditing && personToEdit && onDelete ? (
+              <button
+                type="button"
+                id="btn-delete-person-profile"
+                onClick={() => {
+                  const total = Object.keys(people).length;
+                  if (total <= 1) {
+                    setError("Shajarada kamida 1 kishi bo'lishi shart, oxirgi shaxsni o'chira olmaysiz!");
+                    return;
+                  }
+                  if (window.confirm(`«${personToEdit.name}» profilini shajaradan butunlay o'chirishni tasdiqlaysizmi?`)) {
+                    onDelete(personToEdit.id);
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/80 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Profilni o'chirish</span>
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="submit"
+                id="btn-submit-person-form"
+                className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md hover:shadow transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{isEditing ? "O'zgarishlarni saqlash" : "Shajaraga qo'shish"}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
