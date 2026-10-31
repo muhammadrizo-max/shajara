@@ -20,9 +20,11 @@ import {
   ChevronDown,
   Info,
   Sparkles,
-  Printer
+  Printer,
+  BookOpen
 } from 'lucide-react';
 import { ThemeMode } from '../utils/theme';
+import { PolicyType } from './LegalPolicyModal';
 
 interface NavbarProps {
   viewMode: ViewMode;
@@ -42,6 +44,7 @@ interface NavbarProps {
   onImport: (file: File) => void;
   onRequestLogout: () => void;
   onOpenLoginModal: () => void;
+  onOpenPolicy?: (type: PolicyType) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -62,6 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onImport,
   onRequestLogout,
   onOpenLoginModal,
+  onOpenPolicy,
 }) => {
   const importFileRef = useRef<HTMLInputElement>(null);
   const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
@@ -306,16 +310,30 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                     <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
 
-                    {/* Mehmon sahifasi */}
+                    {/* Foydalanish yo'riqnomasi */}
+                    {onOpenPolicy && (
+                      <button
+                        onClick={() => {
+                          setIsToolsDropdownOpen(false);
+                          onOpenPolicy('guide');
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold transition cursor-pointer"
+                      >
+                        <BookOpen className="w-4 h-4 text-emerald-500" />
+                        <span>Foydalanish yo'riqnomasi</span>
+                      </button>
+                    )}
+
+                    {/* Landing sahifasi */}
                     <button
                       onClick={() => {
                         setIsToolsDropdownOpen(false);
                         onViewModeChange('guest');
                       }}
-                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 font-medium transition"
+                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition cursor-pointer"
                     >
-                      <Info className="w-4 h-4" />
-                      <span>Tanishuv & Mehmon sahifasi</span>
+                      <Info className="w-4 h-4 text-slate-500" />
+                      <span>Landing Page (shajarachi.uz)</span>
                     </button>
 
                   </div>

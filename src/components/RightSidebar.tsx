@@ -15,9 +15,12 @@ import {
   ChevronRight,
   Sparkles,
   CheckCircle2,
-  Lock
+  Lock,
+  BookOpen,
+  ScrollText
 } from 'lucide-react';
 import { AuthUser, Person } from '../types';
+import { PolicyType } from './LegalPolicyModal';
 
 interface RightSidebarProps {
   isOpen: boolean;
@@ -30,7 +33,7 @@ interface RightSidebarProps {
   onOpenTelegramBotModal: () => void;
   onOpenStatsModal: () => void;
   onOpenHistoryModal: () => void;
-  onOpenPolicy: (type: 'privacy' | 'terms' | 'offer' | 'consent') => void;
+  onOpenPolicy: (type: PolicyType) => void;
   onRequestLogout: () => void;
 }
 
@@ -254,18 +257,33 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               </button>
             </div>
 
-            {/* Huquqiy & Maxfiylik */}
+            {/* Huquqiy & Maxfiylik & Qo'llanma */}
             <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
-                Xavfsizlik & Qoidalar
+                Qo'llanma & Qoidalar
               </div>
+
+              {/* Saytdan foydalanish yo'riqnomasi */}
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenPolicy('guide');
+                }}
+                className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/60 border border-emerald-200/60 dark:border-emerald-800/60 transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <BookOpen className="w-4 h-4 text-emerald-600" />
+                  <span>Saytdan foydalanish yo'riqnomasi</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-emerald-500" />
+              </button>
 
               <button
                 onClick={() => {
                   onClose();
                   onOpenPolicy('privacy');
                 }}
-                className="w-full p-2 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                className="w-full p-2 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -279,11 +297,25 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                   onClose();
                   onOpenPolicy('terms');
                 }}
-                className="w-full p-2 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                className="w-full p-2 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
                   <FileText className="w-4 h-4 text-slate-500" />
                   <span>Foydalanish shartlari</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenPolicy('offer');
+                }}
+                className="w-full p-2 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <ScrollText className="w-4 h-4 text-amber-500" />
+                  <span>Ommaviy oferta & Rozilik</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
               </button>

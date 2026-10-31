@@ -700,6 +700,7 @@ export default function App() {
           onImport={handleImport}
           onRequestLogout={() => setIsLogoutConfirmOpen(true)}
           onOpenLoginModal={() => setIsLoginModalOpen(true)}
+          onOpenPolicy={handleOpenPolicy}
         />
       )}
 
