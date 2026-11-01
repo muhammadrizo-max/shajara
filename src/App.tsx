@@ -5,6 +5,7 @@ import {
   saveFamilyTreeState, 
   fetchTreeFromCloud,
   saveTreeToCloud,
+  deleteTreeFromCloud,
   exportStateAsJSON, 
   importStateFromJSON,
   clearAllShajaraData
@@ -99,6 +100,7 @@ export default function App() {
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
   const [parentForNewChild, setParentForNewChild] = useState<Person | null>(null);
   const [childForNewParent, setChildForNewParent] = useState<Person | null>(null);
+  const [siblingForNewPerson, setSiblingForNewPerson] = useState<Person | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCalcModalOpen, setIsCalcModalOpen] = useState<boolean>(false);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
@@ -614,26 +616,41 @@ export default function App() {
       setChildForNewParent(targetPerson);
       setParentForNewChild(null);
       setSpouseForNewPerson(null);
+      setSiblingForNewPerson(null);
       setInitialGenderForModal('male');
     } else if (type === 'mother') {
       setChildForNewParent(targetPerson);
       setParentForNewChild(null);
       setSpouseForNewPerson(null);
+      setSiblingForNewPerson(null);
       setInitialGenderForModal('female');
     } else if (type === 'spouse') {
       setSpouseForNewPerson(targetPerson);
       setChildForNewParent(null);
       setParentForNewChild(null);
+      setSiblingForNewPerson(null);
       setInitialGenderForModal(targetPerson.gender === 'male' ? 'female' : 'male');
+    } else if (type === 'brother' || type === 'sister') {
+      setSiblingForNewPerson(targetPerson);
+      if (targetPerson.parentId && state.people[targetPerson.parentId]) {
+        setParentForNewChild(state.people[targetPerson.parentId]);
+      } else {
+        setParentForNewChild(null);
+      }
+      setChildForNewParent(null);
+      setSpouseForNewPerson(null);
+      setInitialGenderForModal(type === 'brother' ? 'male' : 'female');
     } else if (type === 'son') {
       setParentForNewChild(targetPerson);
       setChildForNewParent(null);
       setSpouseForNewPerson(null);
+      setSiblingForNewPerson(null);
       setInitialGenderForModal('male');
     } else if (type === 'daughter') {
       setParentForNewChild(targetPerson);
       setChildForNewParent(null);
       setSpouseForNewPerson(null);
+      setSiblingForNewPerson(null);
       setInitialGenderForModal('female');
     }
     setIsEditModalOpen(true);
@@ -643,6 +660,7 @@ export default function App() {
     setChildForNewParent(child);
     setParentForNewChild(null);
     setSpouseForNewPerson(null);
+    setSiblingForNewPerson(null);
     setTargetRelationType('father');
     setInitialGenderForModal('male');
     setPersonToEdit(null);
@@ -652,6 +670,7 @@ export default function App() {
   const handleAddChild = (parent: Person) => {
     setParentForNewChild(parent);
     setChildForNewParent(null);
+    setSiblingForNewPerson(null);
     setPersonToEdit(null);
     setIsEditModalOpen(true);
   };
@@ -660,6 +679,7 @@ export default function App() {
     setPersonToEdit(person);
     setParentForNewChild(null);
     setChildForNewParent(null);
+    setSiblingForNewPerson(null);
     setIsEditModalOpen(true);
   };
 
@@ -667,7 +687,7 @@ export default function App() {
     setPersonToEdit(null);
     setParentForNewChild(null);
     setChildForNewParent(null);
-    setIsEditModalOpen(true);
+    setSiblingForNewPerson(null);
   };
 
   const handleUpdateFamilyName = (newName: string) => {
@@ -712,7 +732,12 @@ export default function App() {
 
   const handleResetToDefault = () => {
     if (confirm("Shajaradagi barcha ma'lumotlarni tozalab, yangidan noldan boshlamoqchimisiz?")) {
+      const currentUserId = state.currentUser?.id;
+      const currentEmail = state.currentUser?.email;
+
       clearAllShajaraData();
+      deleteTreeFromCloud(currentUserId, currentEmail).catch(() => {});
+
       const freshState: FamilyTreeState = {
         people: {},
         rootId: '',
@@ -727,8 +752,8 @@ export default function App() {
         title: "Barcha ma'lumotlar tozalandi",
         description: "Shajara to'liq tozalanib, noldan boshlash holatiga keltirildi.",
       });
-      setIsLoginModalOpen(true);
-      showToast("Barcha ma'lumotlar tozalandi. Yangi ro'yxatdan o'tishingiz mumkin!");
+      setViewMode('guest');
+      showToast("Barcha ma'lumotlar tozalandi. Yangidan boshlashingiz mumkin!");
     }
   };
 
@@ -932,6 +957,7 @@ export default function App() {
           setChildForNewParent(null);
           setParentForNewChild(null);
           setSpouseForNewPerson(null);
+          setSiblingForNewPerson(null);
           setTargetRelationType(null);
           setInitialGenderForModal(undefined);
           setPersonToEdit(null);
@@ -940,6 +966,7 @@ export default function App() {
         parentForNewChild={parentForNewChild}
         childForNewParent={childForNewParent}
         spouseForPerson={spouseForNewPerson}
+        siblingForPerson={siblingForNewPerson}
         targetRelationType={targetRelationType}
         initialGender={initialGenderForModal}
         people={state.people}
@@ -1063,6 +1090,19 @@ export default function App() {
         onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
         onOpenPolicy={handleOpenPolicy}
         onRequestLogout={() => setIsLogoutConfirmOpen(true)}
+        onEditMyProfile={() => {
+          if (state.meId && state.people[state.meId]) {
+            handleEditPerson(state.people[state.meId]);
+          } else {
+            handleOpenAddRoot();
+          }
+        }}
+        onOpenContactModal={() => {
+          setViewMode('guest');
+          setTimeout(() => {
+            document.getElementById('boglanish-section')?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }}
       />
 
       {/* Real Hisobdan Chiqishni Tasdiqlash Modali */}

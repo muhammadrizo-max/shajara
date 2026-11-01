@@ -18,7 +18,7 @@ function setCorsHeaders(req: any, res: any) {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
@@ -165,6 +165,34 @@ export default async function handler(req: any, res: any) {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: false, error: err.message || 'Server xatosi' }));
     }
+    return;
+  }
+
+  if (req.method === 'DELETE') {
+    const url = new URL(req.url, 'http://localhost:3000');
+    const userId = url.searchParams.get('userId');
+    const email = url.searchParams.get('email');
+
+    const candidates = [
+      email ? path.join(DATA_DIR, `${sanitizeKey(email)}.json`) : null,
+      userId ? path.join(DATA_DIR, `${sanitizeKey(userId)}.json`) : null,
+    ].filter(Boolean) as string[];
+
+    let deletedAny = false;
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          deletedAny = true;
+        } catch (e) {
+          console.error('[API Tree Delete Error]:', e);
+        }
+      }
+    }
+
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: true, deleted: deletedAny, message: 'Serverdagi shajara ma\'lumotlari tozalandi' }));
     return;
   }
 

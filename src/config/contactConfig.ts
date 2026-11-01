@@ -35,7 +35,7 @@ export const CONTACT_SETTINGS = {
   // Bo'ldi! Tizim avtomatik ravishda xabarlarni emailga ham yo'naltiradi.
   email: {
     enabled: false, // Kelajakda email ochilganda buni `true` ga o'zgartirasiz
-    adminEmail: 'info@shajarachi.uz', // Kelajakdagi rasmiy email manzilingiz
+    adminEmail: 'admin@shajarachi.uz', // Kelajakdagi rasmiy email manzilingiz
     senderName: 'Shajarachi Portali',
     subjectPrefix: '[Shajarachi.uz Murojaat]',
   },

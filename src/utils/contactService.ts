@@ -7,7 +7,8 @@ import { CONTACT_SETTINGS } from '../config/contactConfig';
 import { supabase } from './supabaseClient';
 
 export interface ContactMessagePayload {
-  email: string;
+  contactInfo?: string;
+  email?: string;
   message: string;
   senderName?: string;
 }
@@ -24,20 +25,21 @@ export interface ContactResponse {
  * Foydalanuvchi xabarini yuborish
  */
 export async function sendContactMessage(payload: ContactMessagePayload): Promise<ContactResponse> {
-  const cleanEmail = payload.email.trim();
+  const cleanContact = (payload.contactInfo || payload.email || '').trim();
   const cleanMsg = payload.message.trim();
   const timestamp = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
 
-  if (!cleanEmail || !cleanMsg) {
+  if (!cleanContact || !cleanMsg) {
     return {
       success: false,
-      message: "Iltimos, email va xabarni to'liq kiriting",
+      message: "Iltimos, Telegram yoki telefon raqamingiz va xabarni to'liq kiriting",
     };
   }
 
   const record = {
     id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    email: cleanEmail,
+    contact_info: cleanContact,
+    email: cleanContact,
     message: cleanMsg,
     sender_name: payload.senderName || 'Mehmon',
     created_at: new Date().toISOString(),
@@ -74,7 +76,8 @@ export async function sendContactMessage(payload: ContactMessagePayload): Promis
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: cleanEmail,
+        contactInfo: cleanContact,
+        email: cleanContact,
         message: cleanMsg,
         timestamp,
         settings: CONTACT_SETTINGS,
@@ -93,7 +96,7 @@ export async function sendContactMessage(payload: ContactMessagePayload): Promis
   // 4. Agar botToken to'g'ridan-to'g'ri sozlangan bo'lsa, clientdan ham Telegram Bot API ga yuborishga urinish
   if (!sentToTelegram && CONTACT_SETTINGS.telegram.botToken && CONTACT_SETTINGS.telegram.adminChatId) {
     try {
-      const text = `📬 *Yangi Murojaat | Shajarachi.uz*\n\n👤 *Yuboruvchi Emaili:* \`${cleanEmail}\`\n⏰ *Vaqt:* ${timestamp}\n\n💬 *Xabar:*\n${cleanMsg}`;
+      const text = `📬 *Yangi Murojaat | Shajarachi.uz*\n\n👤 *Aloqa (Telegram/Tel):* \`${cleanContact}\`\n⏰ *Vaqt:* ${timestamp}\n\n💬 *Xabar:*\n${cleanMsg}`;
       const tgUrl = `https://api.telegram.org/bot${CONTACT_SETTINGS.telegram.botToken}/sendMessage`;
       await fetch(tgUrl, {
         method: 'POST',

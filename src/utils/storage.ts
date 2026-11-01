@@ -78,6 +78,21 @@ export async function saveTreeToCloud(state: FamilyTreeState, userId?: string | 
   }
 }
 
+export async function deleteTreeFromCloud(userId?: string | null, email?: string | null): Promise<boolean> {
+  try {
+    const params = new URLSearchParams();
+    if (userId) params.set('userId', userId);
+    if (email) params.set('email', email);
+    const res = await fetch(`/api/tree?${params.toString()}`, {
+      method: 'DELETE',
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('[Cloud Sync] deleteTreeFromCloud xatolik:', e);
+    return false;
+  }
+}
+
 export function saveFamilyTreeState(state: FamilyTreeState, userId?: string | null): void {
   try {
     const targetUserId = userId || state.currentUser?.id;

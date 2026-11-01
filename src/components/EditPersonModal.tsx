@@ -24,7 +24,8 @@ interface EditPersonModalProps {
   parentForNewChild: Person | null;
   childForNewParent?: Person | null;
   spouseForPerson?: Person | null;
-  targetRelationType?: 'father' | 'mother' | 'spouse' | 'son' | 'daughter' | null;
+  siblingForPerson?: Person | null;
+  targetRelationType?: 'father' | 'mother' | 'spouse' | 'son' | 'daughter' | 'brother' | 'sister' | null;
   initialGender?: Gender;
   people: Record<string, Person>;
   onSave: (person: Person) => void;
@@ -50,6 +51,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   parentForNewChild,
   childForNewParent,
   spouseForPerson,
+  siblingForPerson,
   targetRelationType,
   initialGender,
   people,
@@ -65,7 +67,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const isAddingSpouse = !!spouseForPerson;
 
   const defaultGender: Gender = personToEdit?.gender || initialGender || (
-    targetRelationType === 'mother' || targetRelationType === 'daughter'
+    targetRelationType === 'mother' || targetRelationType === 'daughter' || targetRelationType === 'sister'
       ? 'female'
       : targetRelationType === 'spouse' && spouseForPerson
       ? (spouseForPerson.gender === 'male' ? 'female' : 'male')
@@ -76,9 +78,11 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
   const [surname, setSurname] = useState<string>(personToEdit?.surname || '');
   const [gender, setGender] = useState<Gender>(defaultGender);
   const [parentId, setParentId] = useState<string | null>(
-    personToEdit ? personToEdit.parentId : parentForNewChild ? parentForNewChild.id : null
+    personToEdit ? personToEdit.parentId : parentForNewChild ? parentForNewChild.id : siblingForPerson ? (siblingForPerson.parentId ?? null) : null
   );
-  const [motherId, setMotherId] = useState<string | null>(personToEdit?.motherId || null);
+  const [motherId, setMotherId] = useState<string | null>(
+    personToEdit?.motherId || (siblingForPerson?.motherId ?? null)
+  );
   const [spouseId, setSpouseId] = useState<string | null>(personToEdit?.spouseId || null);
   const [isNoFatherSelected, setIsNoFatherSelected] = useState<boolean>(false);
 
@@ -444,6 +448,10 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
                 ? `«${childForNewParent.name}»ga Ona qo'shish`
                 : targetRelationType === 'spouse' && spouseForPerson
                 ? `«${spouseForPerson.name}»ga Turmush o'rtoq qo'shish`
+                : targetRelationType === 'brother' && (siblingForPerson || parentForNewChild)
+                ? `«${(siblingForPerson || parentForNewChild)?.name}»ga Aka / Uka qo'shish`
+                : targetRelationType === 'sister' && (siblingForPerson || parentForNewChild)
+                ? `«${(siblingForPerson || parentForNewChild)?.name}»ga Opa / Singil qo'shish`
                 : targetRelationType === 'son' && parentForNewChild
                 ? `«${parentForNewChild.name}»ga O'g'il farzand qo'shish`
                 : targetRelationType === 'daughter' && parentForNewChild

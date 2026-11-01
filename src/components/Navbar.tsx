@@ -254,18 +254,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span>Menga kim bo'ladi?</span>
                     </button>
 
-                    {/* Chop etish */}
-                    <button
-                      onClick={() => {
-                        setIsToolsDropdownOpen(false);
-                        onOpenPrintModal();
-                      }}
-                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-medium transition"
-                    >
-                      <Printer className="w-4 h-4 text-amber-600" />
-                      <span>Chop etish (A4 / PDF)</span>
-                    </button>
-
                     {/* Tarix */}
                     <button
                       onClick={() => {
@@ -276,36 +264,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     >
                       <History className="w-4 h-4 text-sky-600" />
                       <span>Amallar tarixi</span>
-                    </button>
-
-                    <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
-
-                    {/* JSON Export */}
-                    <button
-                      onClick={() => {
-                        setIsToolsDropdownOpen(false);
-                        onExport();
-                      }}
-                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition"
-                    >
-                      <Download className="w-4 h-4 text-slate-500" />
-                      <span>Shajarani yuklash (JSON)</span>
-                    </button>
-
-                    {/* JSON Import */}
-                    <input
-                      ref={importFileRef}
-                      type="file"
-                      accept=".json"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => importFileRef.current?.click()}
-                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition"
-                    >
-                      <Upload className="w-4 h-4 text-indigo-500" />
-                      <span>Fayldan tiklash (JSON)</span>
                     </button>
 
                     <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
@@ -359,17 +317,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {currentUser?.role === 'owner' ? 'Shajara Asoschisi' : 'Oila A\'zosi'}
                 </span>
               </div>
-            </button>
-
-            {/* Logout icon-only button with real confirmation prompt */}
-            <button
-              id="btn-nav-logout-icon"
-              type="button"
-              onClick={onRequestLogout}
-              className="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 transition-colors flex items-center justify-center cursor-pointer"
-              title="Hisobdan chiqish (Log out)"
-            >
-              <LogOut className="w-4 h-4" />
             </button>
 
           </div>

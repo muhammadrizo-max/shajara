@@ -2,7 +2,7 @@ import React from 'react';
 import { Person } from '../types';
 import { X, UserPlus, Heart, Users, Shield, Sparkles } from 'lucide-react';
 
-export type RelativeRelationType = 'father' | 'mother' | 'spouse' | 'son' | 'daughter';
+export type RelativeRelationType = 'father' | 'mother' | 'spouse' | 'son' | 'daughter' | 'brother' | 'sister';
 
 interface AddRelativeModalProps {
   isOpen: boolean;
@@ -56,6 +56,24 @@ export const AddRelativeModal: React.FC<AddRelativeModalProps> = ({
       colorClass: 'border-amber-200 dark:border-amber-900/60 hover:bg-amber-50 dark:hover:bg-amber-950/40',
       bgClass: 'bg-amber-100 dark:bg-amber-900/40',
       badge: 'Oila ittifoqi',
+    },
+    {
+      type: 'brother',
+      title: 'Aka / Uka',
+      description: `«${targetPerson.name}»ning akasi yoki ukasi`,
+      icon: <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />,
+      colorClass: 'border-indigo-200 dark:border-indigo-900/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40',
+      bgClass: 'bg-indigo-100 dark:bg-indigo-900/40',
+      badge: 'Bir avlod / Tug\'ishgan',
+    },
+    {
+      type: 'sister',
+      title: 'Opa / Singil',
+      description: `«${targetPerson.name}»ning opasi yoki singlisi`,
+      icon: <Heart className="w-5 h-5 text-violet-600 dark:text-violet-400" />,
+      colorClass: 'border-violet-200 dark:border-violet-900/60 hover:bg-violet-50 dark:hover:bg-violet-950/40',
+      bgClass: 'bg-violet-100 dark:bg-violet-900/40',
+      badge: 'Bir avlod / Tug\'ishgan',
     },
     {
       type: 'son',

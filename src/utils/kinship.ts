@@ -249,23 +249,172 @@ export function calculateKinship(
     };
   }
 
-  const { lca, pathA, pathB } = findLowestCommonAncestor(fromPersonId, toPersonId, people);
+  // 1. Direct Spouse (Er / Xotin)
+  if (fromPerson.spouseId === toPersonId || toPerson.spouseId === fromPersonId) {
+    const isFemale = toPerson.gender === 'female';
+    return {
+      relationNameUz: isFemale ? "Turmush o'rtog'ingiz (Rafiqangiz)" : "Turmush o'rtog'ingiz (Eringiz)",
+      description: "Qonuniy turmush o'rtog'ingiz",
+      generationDiff: 0,
+      path: [fromPerson.name, toPerson.name],
+      isDirectAncestor: false,
+      isDirectDescendant: false,
+      ancestorTitleUz: isFemale ? "Rafiqangiz" : "Eringiz",
+    };
+  }
+
+  // 2. Direct Mother / Father
+  if (fromPerson.motherId === toPersonId) {
+    return {
+      relationNameUz: "Onangiz",
+      description: "Sizning onangiz (2-pusht)",
+      generationDiff: 1,
+      path: [fromPerson.name, toPerson.name],
+      commonAncestorName: toPerson.name,
+      isDirectAncestor: true,
+      isDirectDescendant: false,
+      ancestorTitleUz: "Ona",
+    };
+  }
+
+  if (fromPerson.parentId === toPersonId) {
+    return {
+      relationNameUz: "Otangiz",
+      description: "Sizning otangiz (2-pusht)",
+      generationDiff: 1,
+      path: [fromPerson.name, toPerson.name],
+      commonAncestorName: toPerson.name,
+      isDirectAncestor: true,
+      isDirectDescendant: false,
+      ancestorTitleUz: "Ota",
+    };
+  }
+
+  // 3. Spouses of Direct Ancestors (Mother / Grandmother / Great-grandmother)
+  const pathA = getLineageToRoot(fromPersonId, people);
+  for (let idx = 1; idx < pathA.length; idx++) {
+    const ancestor = pathA[idx];
+    if (ancestor.spouseId === toPersonId || toPerson.spouseId === ancestor.id) {
+      if (idx === 1) {
+        return {
+          relationNameUz: "Onangiz",
+          description: "Otangizning turmush o'rtog'i (Onangiz)",
+          generationDiff: 1,
+          path: [fromPerson.name, ancestor.name, toPerson.name],
+          commonAncestorName: ancestor.name,
+          isDirectAncestor: true,
+          isDirectDescendant: false,
+          ancestorTitleUz: "Ona",
+        };
+      } else if (idx === 2) {
+        return {
+          relationNameUz: "Buvangiz",
+          description: "Bobongizning turmush o'rtog'i (Katta onangiz / Buvangiz)",
+          generationDiff: 2,
+          path: [fromPerson.name, pathA[1].name, ancestor.name, toPerson.name],
+          commonAncestorName: ancestor.name,
+          isDirectAncestor: true,
+          isDirectDescendant: false,
+          ancestorTitleUz: "Buva",
+        };
+      } else if (idx === 3) {
+        return {
+          relationNameUz: "Katta buvangiz",
+          description: "Katta bobongizning turmush o'rtog'i",
+          generationDiff: 3,
+          path: [fromPerson.name, pathA[1].name, pathA[2].name, ancestor.name, toPerson.name],
+          commonAncestorName: ancestor.name,
+          isDirectAncestor: true,
+          isDirectDescendant: false,
+          ancestorTitleUz: "Katta buva",
+        };
+      } else {
+        return {
+          relationNameUz: `${idx}-ajdod buvangiz`,
+          description: `${idx}-ajdod bobongizning turmush o'rtog'i`,
+          generationDiff: idx,
+          path: [fromPerson.name, ancestor.name, toPerson.name],
+          commonAncestorName: ancestor.name,
+          isDirectAncestor: true,
+          isDirectDescendant: false,
+          ancestorTitleUz: `${idx}-ajdod ona`,
+        };
+      }
+    }
+  }
+
+  // 4. Spouse of Collateral Relatives (Amaki / Amma / Tog'a / Sibling)
+  if (toPerson.spouseId && people[toPerson.spouseId]) {
+    const spouseObj = people[toPerson.spouseId];
+    // Check if spouseObj has direct father connection to someone in pathA
+    if (spouseObj.parentId && pathA.some(a => a.id === spouseObj.parentId)) {
+      const parentInLineage = pathA.find(a => a.id === spouseObj.parentId);
+      const stepIdx = pathA.indexOf(parentInLineage!);
+      if (stepIdx === 1) {
+        // Spouse of brother or sister
+        return {
+          relationNameUz: toPerson.gender === 'female' ? "Kelinoyi (Akangiz/Ukangizning ayoli)" : "Pochchangiz (Opangiz/Singlingizning eri)",
+          description: "Tug'ishganingizning turmush o'rtog'i",
+          generationDiff: 0,
+          path: [fromPerson.name, spouseObj.name, toPerson.name],
+          isDirectAncestor: false,
+          isDirectDescendant: false,
+        };
+      } else if (stepIdx === 2) {
+        // Spouse of Uncle or Aunt (Amaki / Amma)
+        return {
+          relationNameUz: toPerson.gender === 'female' ? "Kelinoyi (Amakingizning rafiqasi)" : "Pochchangiz (Ammangizning eri)",
+          description: "Amaki yoki ammangizning turmush o'rtog'i",
+          generationDiff: 1,
+          path: [fromPerson.name, pathA[1].name, spouseObj.name, toPerson.name],
+          isDirectAncestor: false,
+          isDirectDescendant: false,
+        };
+      }
+    }
+  }
+
+  const { lca, pathB } = findLowestCommonAncestor(fromPersonId, toPersonId, people);
+
+  // If no LCA found, fallback cleanly to avoid negative kinship values
+  if (!lca) {
+    const genDiff = (toPerson.generation || 1) - (fromPerson.generation || 1);
+    return {
+      relationNameUz: toPerson.gender === 'female' ? "Qarindosh ayol" : "Qarindosh",
+      description: "Shajaradagi qarindoshingiz",
+      generationDiff: genDiff,
+      path: [fromPerson.name, toPerson.name],
+      isDirectAncestor: false,
+      isDirectDescendant: false,
+    };
+  }
 
   // Index of LCA in pathA (fromPerson up to root) and pathB (toPerson up to root)
-  const distFrom = lca ? pathA.findIndex((p) => p.id === lca.id) : -1;
-  const distTo = lca ? pathB.findIndex((p) => p.id === lca.id) : -1;
+  const distFrom = pathA.findIndex((p) => p.id === lca.id);
+  const distTo = pathB.findIndex((p) => p.id === lca.id);
+
+  if (distFrom === -1 || distTo === -1) {
+    return {
+      relationNameUz: toPerson.gender === 'female' ? "Qarindosh ayol" : "Qarindosh",
+      description: "Shajaradagi qarindoshingiz",
+      generationDiff: 0,
+      path: [fromPerson.name, toPerson.name],
+      isDirectAncestor: false,
+      isDirectDescendant: false,
+    };
+  }
 
   const isMale = toPerson.gender === 'male';
 
   // 1. Direct Ancestor (toPerson is direct ancestor of fromPerson)
-  if (lca && lca.id === toPersonId) {
+  if (lca.id === toPersonId) {
     const steps = distFrom; // e.g. 1 = father, 2 = grandfather, etc.
     const titleInfo = UZBEK_ANCESTOR_TITLES[steps] || {
       title: `${steps}-ajdod bobo`,
       desc: `${steps}-avlod yuqori ajdod`,
     };
     return {
-      relationNameUz: !isMale && steps === 1 ? 'Ona' : titleInfo.title,
+      relationNameUz: !isMale && steps === 1 ? 'Ona' : (!isMale && steps === 2 ? 'Buva' : titleInfo.title),
       description: `Sizdan ${steps} avlod yuqori turuvchi to'g'ridan-to'g'ri ajdodingiz`,
       generationDiff: steps,
       path: pathA.slice(0, distFrom + 1).map((p) => p.name),
@@ -277,7 +426,7 @@ export function calculateKinship(
   }
 
   // 2. Direct Descendant (toPerson is child/grandchild of fromPerson)
-  if (lca && lca.id === fromPersonId) {
+  if (lca.id === fromPersonId) {
     const steps = distTo;
     let title = isMale ? "O'g'lingiz" : "Qizingiz";
     if (steps === 2) title = isMale ? "O'g'il nabirangiz" : "Qiz nabirangiz";
@@ -298,15 +447,15 @@ export function calculateKinship(
     };
   }
 
-  // 3. Siblings (Same Father)
+  // 3. Siblings (Same Father / Parents)
   if (distFrom === 1 && distTo === 1) {
     const relationName = isMale ? "Akangiz / Ukangiz" : "Opangiz / Singlingiz";
     return {
       relationNameUz: relationName,
       description: "Bir ota-onadan tug'ilgan tug'ishganingiz",
       generationDiff: 0,
-      path: [fromPerson.name, lca!.name, toPerson.name],
-      commonAncestorName: lca?.name,
+      path: [fromPerson.name, lca.name, toPerson.name],
+      commonAncestorName: lca.name,
       isDirectAncestor: false,
       isDirectDescendant: false,
     };
@@ -319,8 +468,8 @@ export function calculateKinship(
       relationNameUz: relationName,
       description: `Otangizning ${isMale ? "og'asi / ukasi" : "opasi / singlisi"}`,
       generationDiff: 1,
-      path: [fromPerson.name, pathA[1].name, lca!.name, toPerson.name],
-      commonAncestorName: lca?.name,
+      path: [fromPerson.name, pathA[1].name, lca.name, toPerson.name],
+      commonAncestorName: lca.name,
       isDirectAncestor: false,
       isDirectDescendant: false,
     };
@@ -333,8 +482,8 @@ export function calculateKinship(
       relationNameUz: relationName,
       description: `Bobongizning ${isMale ? "akasi/ukasi" : "opasi/singlisi"}`,
       generationDiff: 2,
-      path: [fromPerson.name, pathA[1].name, pathA[2].name, lca!.name, toPerson.name],
-      commonAncestorName: lca?.name,
+      path: [fromPerson.name, pathA[1].name, pathA[2].name, lca.name, toPerson.name],
+      commonAncestorName: lca.name,
       isDirectAncestor: false,
       isDirectDescendant: false,
     };
@@ -352,8 +501,8 @@ export function calculateKinship(
       relationNameUz: relationName,
       description: `Bobongiz orqali bog'langan ${isParentMale ? "amakingizning" : "ammangizning"} farzandi`,
       generationDiff: 0,
-      path: [fromPerson.name, pathA[1].name, lca!.name, parentOfTo.name, toPerson.name],
-      commonAncestorName: lca?.name,
+      path: [fromPerson.name, pathA[1].name, lca.name, parentOfTo.name, toPerson.name],
+      commonAncestorName: lca.name,
       isDirectAncestor: false,
       isDirectDescendant: false,
     };
@@ -366,21 +515,21 @@ export function calculateKinship(
       relationNameUz: relationName,
       description: "Akangiz yoki ukangizning farzandi",
       generationDiff: -1,
-      path: [fromPerson.name, lca!.name, pathB[1].name, toPerson.name],
-      commonAncestorName: lca?.name,
+      path: [fromPerson.name, lca.name, pathB[1].name, toPerson.name],
+      commonAncestorName: lca.name,
       isDirectAncestor: false,
       isDirectDescendant: false,
     };
   }
 
-  // 8. Distant Cousin / Sibling of higher level
-  if (distFrom === distTo) {
+  // 8. Distant Cousin / Sibling of higher level (MUST BE distFrom > 0)
+  if (distFrom > 0 && distFrom === distTo) {
     return {
       relationNameUz: `${distFrom}-darajali qarindosh (avlod tengdoshi)`,
-      description: `${lca?.name || 'Umumiy bobo'} orqali tutashgan qarindoshingiz`,
+      description: `${lca.name || 'Umumiy bobo'} orqali tutashgan qarindoshingiz`,
       generationDiff: 0,
-      path: [fromPerson.name, '...', lca?.name || '', '...', toPerson.name],
-      commonAncestorName: lca?.name,
+      path: [fromPerson.name, '...', lca.name || '', '...', toPerson.name],
+      commonAncestorName: lca.name,
       isDirectAncestor: false,
       isDirectDescendant: false,
     };

@@ -49,7 +49,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
   onOpenPolicy,
 }) => {
   const [activeSection, setActiveSection] = useState<SectionKey>('hero');
-  const [contactEmail, setContactEmail] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
   const [contactMessage, setContactMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
@@ -99,12 +99,13 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contactEmail.trim() || !contactMessage.trim()) return;
+    if (!contactInfo.trim() || !contactMessage.trim()) return;
 
     setIsSubmitting(true);
     try {
       const res = await sendContactMessage({
-        email: contactEmail.trim(),
+        contactInfo: contactInfo.trim(),
+        email: contactInfo.trim(),
         message: contactMessage.trim(),
       });
 
@@ -116,7 +117,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
       );
 
       setTimeout(() => {
-        setContactEmail('');
+        setContactInfo('');
         setContactMessage('');
         setIsSent(false);
         setIsSubmitting(false);
@@ -239,10 +240,10 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
         <div className="absolute inset-0 bg-gradient-to-t from-[#040D14] via-transparent to-[#040D14]/60 z-0" />
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-12 items-center">
+        <div className="relative z-10 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           
-          {/* Left Text and CTA */}
-          <div className="lg:col-span-7 space-y-6 sm:space-y-7">
+          {/* Left Text and CTA — Unobstructed so the glowing tree on the right shines brightly */}
+          <div className="lg:col-span-8 max-w-2xl space-y-6 sm:space-y-7">
             
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold shadow-lg shadow-emerald-950/50 backdrop-blur-sm animate-in fade-in duration-300">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -304,70 +305,8 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
             </div>
           </div>
 
-          {/* Right Floating Badge / Interactive Mini Preview Card */}
-          <div className="lg:col-span-5 flex justify-center">
-            <div className="relative w-full max-w-sm rounded-3xl bg-slate-950/85 backdrop-blur-md p-6 border border-emerald-500/30 shadow-2xl shadow-emerald-950/80 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <FamilyTreeLogo className="w-7 h-7 rounded-lg" />
-                  <div>
-                    <h4 className="text-xs font-black text-white">Shajarachi Meros</h4>
-                    <span className="text-[10px] text-emerald-400">shajarachi.uz</span>
-                  </div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  7 Ajdod
-                </span>
-              </div>
-
-              {/* Real lineage preview */}
-              <div className="space-y-2 py-1">
-                <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-400" />
-                    <span className="font-bold text-slate-200">Katta bobo (4-pusht)</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">1895-yil</span>
-                </div>
-
-                <div className="ml-4 pl-3 border-l-2 border-emerald-500/40 space-y-2">
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      <span className="font-bold text-slate-200">Bobo (3-pusht)</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400">1932-yil</span>
-                  </div>
-
-                  <div className="ml-4 pl-3 border-l-2 border-emerald-500/40 space-y-2">
-                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-sky-400" />
-                        <span className="font-bold text-slate-200">Ota (2-pusht)</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400">1968-yil</span>
-                    </div>
-
-                    <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        <span className="font-black text-emerald-200">Siz (Meros davomchisi)</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-400">Markaz</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={onViewTree}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-emerald-500/30 text-xs font-bold text-emerald-300 flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                <span>Interaktiv daraxtni ko'rish</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
+          {/* Right Area — Open and clear to reveal the majestic glowing tree growing out of the holy book */}
+          <div className="hidden lg:block lg:col-span-4" />
 
         </div>
       </section>
@@ -657,7 +596,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               <div className="pt-2 text-xs text-slate-400 space-y-1.5">
                 <div>Domen: <span className="text-emerald-400 font-bold">shajarachi.uz</span></div>
                 <div>Telegram Bot: <span className="text-[#24A1DE] font-bold">@shajarachi_bot</span></div>
-                <div>Rasmiy email: <span className="text-slate-300 font-mono">info@shajarachi.uz</span></div>
+                <div>Rasmiy email: <span className="text-slate-300 font-mono">admin@shajarachi.uz</span></div>
               </div>
             </div>
 
@@ -673,14 +612,14 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 <form onSubmit={handleSendMessage} className="space-y-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                      Email manzilingiz *
+                      Telegram username yoki telefon raqamingiz *
                     </label>
                     <input
-                      type="email"
+                      type="text"
                       required
-                      placeholder="Masalan: namuna@gmail.com"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
+                      placeholder="Masalan: @username yoki +998 90 123 45 67"
+                      value={contactInfo}
+                      onChange={(e) => setContactInfo(e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-950/80 border border-slate-700/80 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
@@ -791,7 +730,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                   </span>
                 </li>
                 <li className="text-[11px] text-slate-400">
-                  Email: info@shajarachi.uz
+                  Email: admin@shajarachi.uz
                 </li>
               </ul>
             </div>

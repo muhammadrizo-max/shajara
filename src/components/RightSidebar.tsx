@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   Lock,
   BookOpen,
-  ScrollText
+  ScrollText,
+  Edit3,
+  Send
 } from 'lucide-react';
 import { AuthUser, Person } from '../types';
 import { PolicyType } from './LegalPolicyModal';
@@ -35,6 +37,8 @@ interface RightSidebarProps {
   onOpenHistoryModal: () => void;
   onOpenPolicy: (type: PolicyType) => void;
   onRequestLogout: () => void;
+  onEditMyProfile?: () => void;
+  onOpenContactModal?: () => void;
 }
 
 export const RightSidebar: React.FC<RightSidebarProps> = ({
@@ -50,6 +54,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onOpenHistoryModal,
   onOpenPolicy,
   onRequestLogout,
+  onEditMyProfile,
+  onOpenContactModal,
 }) => {
   if (!isOpen) return null;
 
@@ -137,44 +143,65 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 )}
               </div>
 
-              {/* Switch / Edit Account button */}
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenLoginModal();
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center justify-center gap-2"
-              >
-                <Key className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{currentUser ? 'Hisobni almashtirish / Tahrirlash' : 'Hisobga kirish / Ro\'yxatdan o\'tish'}</span>
-              </button>
+              {/* Split Action Buttons: Tahrirlash & Hisobni almashtirish */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  id="btn-sidebar-edit-profile"
+                  onClick={() => {
+                    onClose();
+                    if (onEditMyProfile) onEditMyProfile();
+                  }}
+                  className="py-2 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  title="Profil ma'lumotlarini tahrirlash"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Tahrirlash</span>
+                </button>
+
+                <button
+                  id="btn-sidebar-switch-account"
+                  onClick={() => {
+                    onClose();
+                    onOpenLoginModal();
+                  }}
+                  className="py-2 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  title="Boshqa hisobga kirish yoki ro'yxatdan o'tish"
+                >
+                  <Key className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Almashtirish</span>
+                </button>
+              </div>
             </div>
 
             {/* Profile Actions & Family Collaboration */}
             <div className="space-y-1">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
-                Oila & Hamkorlik
+                Oila & Aloqa
               </div>
 
-              {/* Taklif qilish (Invite Family) - Moved here from navbar per user request */}
+              {/* Taklif / So'rov yuborish (Foydalanuvchi talabi) */}
               <button
-                id="btn-sidebar-invite-family"
+                id="btn-sidebar-send-suggestion"
                 onClick={() => {
                   onClose();
-                  onOpenInviteModal();
+                  if (onOpenContactModal) {
+                    onOpenContactModal();
+                  } else {
+                    onOpenPolicy('guide');
+                  }
                 }}
-                className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-purple-200/80 dark:border-purple-900/50 transition-colors group"
+                className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 transition-colors group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <UserPlus className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Send className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-purple-900 dark:text-purple-300">
-                      Qarindoshlarni taklif qilish
+                    <div className="font-bold text-emerald-950 dark:text-emerald-200">
+                      Taklif / So'rov yuborish
                     </div>
                     <div className="text-[10px] text-slate-400">
-                      Havola orqali birgalikda shajara to'ldirish
+                      Adminga to'g'ridan-to'g'ri fikr yoki xabar yuborish
                     </div>
                   </div>
                 </div>

@@ -61,15 +61,15 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = await parseJsonBody(req);
-    const email = (body.email || '').trim();
+    const contactInfo = (body.contactInfo || body.email || body.phone || body.telegram || '').trim();
     const message = (body.message || '').trim();
     const timestamp = body.timestamp || new Date().toISOString();
     const settings = body.settings || {};
 
-    if (!email || !message) {
+    if (!contactInfo || !message) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, error: 'Email va xabar kiritilishi shart' }));
+      res.end(JSON.stringify({ success: false, error: 'Aloqa ma\'lumoti (Telegram yoki telefon) va xabar kiritilishi shart' }));
       return;
     }
 
@@ -82,7 +82,7 @@ export default async function handler(req: any, res: any) {
 
     if (botToken && adminChatId) {
       try {
-        const text = `📬 *Yangi Murojaat | Shajarachi.uz*\n\n👤 *Foydalanuvchi:* \`${email}\`\n⏰ *Vaqt:* ${timestamp}\n\n💬 *Xabar:*\n${message}`;
+        const text = `📬 *Yangi Murojaat | Shajarachi.uz*\n\n👤 *Aloqa (Telegram / Tel):* \`${contactInfo}\`\n⏰ *Vaqt:* ${timestamp}\n\n💬 *Xabar:*\n${message}`;
         const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -99,13 +99,13 @@ export default async function handler(req: any, res: any) {
         console.warn("[API Contact] Telegram Botga yuborishda xato:", tgErr);
       }
     } else {
-      console.info("[API Contact] Telegram Bot tokeni kiritilmagan, xabar server konsoliga va bazaga qayd etildi:", { email, message });
+      console.info("[API Contact] Telegram Bot tokeni kiritilmagan, xabar server konsoliga va bazaga qayd etildi:", { contactInfo, message });
     }
 
-    // 2. Emailga yuborish (Kelajakda shajarachi.uz domeni emaili ochilganda)
-    // Settings ichidagi `email.enabled` parametri tekshiriladi
+    // 2. Emailga yuborish (admin@shajarachi.uz)
+    const adminEmail = settings?.email?.adminEmail || 'admin@shajarachi.uz';
     if (settings?.email?.enabled) {
-      console.info(`[API Contact] Kelajakdagi email bildirishnomasi: ${settings.email.adminEmail} ga yo'naltirilmoqda`);
+      console.info(`[API Contact] Kelajakdagi email bildirishnomasi: ${adminEmail} ga yo'naltirilmoqda`);
       sentToEmail = true;
     }
 

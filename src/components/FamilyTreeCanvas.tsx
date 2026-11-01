@@ -815,9 +815,15 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               {/* Central Glowing + Button (Foydalanuvchi talabi) */}
               <button
                 type="button"
-                onClick={onOpenAddRoot}
+                onClick={() => {
+                  if (!currentUser && onOpenLoginModal) {
+                    onOpenLoginModal();
+                  } else {
+                    onOpenAddRoot();
+                  }
+                }}
                 className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-500 to-emerald-600 text-white shadow-2xl shadow-emerald-500/40 hover:scale-110 active:scale-95 transition-all flex flex-col items-center justify-center border-4 border-white/80 dark:border-slate-800 cursor-pointer group animate-bounce"
-                title="Yangi shajara yaratish va ilk odamni qo'shish"
+                title={currentUser ? "Yangi shajara yaratish va ilk odamni qo'shish" : "Ro'yxatdan o'tish yoki tizimga kirish"}
               >
                 <Plus className="w-10 h-10 sm:w-12 sm:h-12 group-hover:rotate-90 transition-transform duration-300" />
                 <span className="text-[10px] font-black uppercase tracking-wider mt-0.5">Boshlash</span>
@@ -830,30 +836,6 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
                   Markazdagi «+» tugmasini bosing va shajarangizga ilk shaxsni (o'zingiz yoki katta bobongizni) qo'shing!
                 </p>
-              </div>
-
-              <div className="flex flex-col w-full gap-2 pt-2">
-                {!currentUser && onOpenLoginModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenLoginModal}
-                    className="w-full py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
-                  >
-                    <UserPlus className="w-4 h-4 text-emerald-400" />
-                    <span>Ro'yxatdan o'tish / Kirish</span>
-                  </button>
-                )}
-
-                {onOpenTelegramBotModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenTelegramBotModal}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#24A1DE]/10 hover:bg-[#24A1DE]/20 text-[#24A1DE] dark:text-cyan-400 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Bot className="w-4 h-4" />
-                    <span>Telegram Bot (@shajarachi_bot)</span>
-                  </button>
-                )}
               </div>
             </div>
           )}

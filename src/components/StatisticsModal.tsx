@@ -80,18 +80,18 @@ export const StatisticsModal: React.FC<StatisticsModalProps> = ({
   const neededForNext = Math.max(0, nextGoal - total);
   const currentProgress = Math.min(100, Math.round((total / 100) * 100));
 
-  // 10 Trees Milestones
+  // 10 Trees Milestones (Freemium 1-daraxt 70 odam, Premium 10 tagacha daraxt 160+ odam)
   const TREE_MILESTONES = [
-    { id: 1, name: 'Birinchi nihol', min: 1, icon: '🌱' },
-    { id: 2, name: 'Yosh shox', min: 6, icon: '🌿' },
-    { id: 3, name: 'Yosh daraxt', min: 12, icon: '🌳' },
-    { id: 4, name: 'Kengayuvchi shoxlar', min: 20, icon: '🌲' },
-    { id: 5, name: 'Mustahkam daraxt', min: 25, icon: '🌴' },
-    { id: 6, name: 'Serbutoq daraxt', min: 35, icon: '🍁' },
-    { id: 7, name: 'Qadimgi chinor', min: 50, icon: '🍃' },
-    { id: 8, name: 'Ulug\' chinor', min: 70, icon: '🎋' },
-    { id: 9, name: 'Meros bog\'i', min: 85, icon: '🌸' },
-    { id: 10, name: 'Saltanat shajarasi', min: 100, icon: '👑' },
+    { id: 1, name: 'Birinchi shajara (Freemium)', min: 1, limit: 70, icon: '🌱' },
+    { id: 2, name: 'Katta shajara (Premium #2)', min: 10, limit: 80, icon: '🌿' },
+    { id: 3, name: 'Sulola shajarasi (Premium #3)', min: 25, limit: 90, icon: '🌳' },
+    { id: 4, name: 'Kengayuvchi shoxlar (#4)', min: 40, limit: 100, icon: '🌲' },
+    { id: 5, name: 'Mustahkam chinor (#5)', min: 55, limit: 110, icon: '🌴' },
+    { id: 6, name: 'Serbutoq bo\'ston (#6)', min: 70, limit: 120, icon: '🍁' },
+    { id: 7, name: 'Qadimgi nasl (#7)', min: 85, limit: 130, icon: '🍃' },
+    { id: 8, name: 'Ulug\' chinor (#8)', min: 100, limit: 140, icon: '🎋' },
+    { id: 9, name: 'Meros saltanati (#9)', min: 120, limit: 150, icon: '🌸' },
+    { id: 10, name: 'Oliy shajara (#10)', min: 140, limit: 160, icon: '👑' },
   ];
 
   const unlockedCount = TREE_MILESTONES.filter(m => total >= m.min).length;
@@ -322,9 +322,11 @@ export const StatisticsModal: React.FC<StatisticsModalProps> = ({
 
           {/* Bottom Section: To'plangan daraxtlar (0/10) (6-rasm) */}
           <div className="pt-4 border-t border-slate-800/80 space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-bold text-slate-300 gap-1">
               <span>To'plangan daraxtlar ({unlockedCount}/10)</span>
-              <span className="text-[10px] text-slate-500 font-normal">Har bir bosqich yangi daraxtni ochadi</span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                Har bir bosqich yangi shox va daraxtni ochadi • Freemium: 1 ta daraxt (70 a'zo) • Premium: 10 tagacha daraxt (160+ a'zo)
+              </span>
             </div>
 
             <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">

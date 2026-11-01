@@ -189,19 +189,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               )}
             </div>
 
-            {/* Primary Action Button */}
-            <button
-              id="btn-sidebar-add-relative"
-              onClick={() => {
-                onClose();
-                onOpenAddModal();
-              }}
-              className="w-full py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Yangi shaxs / Farzand qo'shish</span>
-            </button>
-
             {/* Tree Specific Tools (Chop etish, Menga kim, etc.) */}
             <div className="space-y-1">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
@@ -262,36 +249,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
                 Ko'rinish rejimlari
               </div>
-
-              <button
-                onClick={() => {
-                  onViewModeChange('tree');
-                  onClose();
-                }}
-                className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
-                  viewMode === 'tree'
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <FamilyTreeLogo className="w-4 h-4" />
-                <span>Interaktiv Shajara Daraxti</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onViewModeChange('seven-ancestors');
-                  onClose();
-                }}
-                className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold text-left transition-colors ${
-                  viewMode === 'seven-ancestors'
-                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 font-bold'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <Scroll className="w-4 h-4 text-amber-500" />
-                <span>7 Ajdod Zanjiri</span>
-              </button>
 
               <button
                 onClick={() => {
