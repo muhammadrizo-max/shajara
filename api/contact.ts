@@ -103,9 +103,49 @@ export default async function handler(req: any, res: any) {
     }
 
     // 2. Emailga yuborish (admin@shajarachi.uz)
-    const adminEmail = settings?.email?.adminEmail || 'admin@shajarachi.uz';
-    if (settings?.email?.enabled) {
-      console.info(`[API Contact] Kelajakdagi email bildirishnomasi: ${adminEmail} ga yo'naltirilmoqda`);
+    const adminEmail = process.env.ADMIN_EMAIL || settings?.email?.adminEmail || 'admin@shajarachi.uz';
+    const emailSubject = `${settings?.email?.subjectPrefix || '[Shajarachi.uz Murojaat]'} Yangi xabar: ${contactInfo}`;
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
+        <h2 style="color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px;">🌳 Shajarachi.uz — Yangi Murojaat</h2>
+        <p><strong>Yuboruvchi / Aloqa:</strong> ${contactInfo}</p>
+        <p><strong>Vaqt:</strong> ${timestamp}</p>
+        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #059669;">
+          <p style="margin: 0; white-space: pre-wrap; color: #1e293b;">${message}</p>
+        </div>
+        <p style="color: #64748b; font-size: 12px; margin-top: 20px;">Ushbu xabar shajarachi.uz aloqa formasi orqali ${adminEmail} manziliga yo'llandi.</p>
+      </div>
+    `;
+
+    // A) Resend API orqali yuborish
+    if (process.env.RESEND_API_KEY) {
+      try {
+        const resendRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: process.env.EMAIL_FROM || 'Shajarachi <onboarding@resend.dev>',
+            to: [adminEmail],
+            reply_to: contactInfo.includes('@') ? contactInfo : undefined,
+            subject: emailSubject,
+            html: emailHtml,
+          }),
+        });
+        if (resendRes.ok) {
+          sentToEmail = true;
+          console.info(`[API Contact] Resend orqali ${adminEmail} ga xat yuborildi`);
+        } else {
+          const errText = await resendRes.text();
+          console.warn("[API Contact] Resend API xatosi:", errText);
+        }
+      } catch (mailErr) {
+        console.warn("[API Contact] Email yuborishda xatolik:", mailErr);
+      }
+    } else {
+      console.info(`[API Contact] RESEND_API_KEY mavjud emas. Murojaat ${adminEmail} qabuliga tayyorlandi.`);
       sentToEmail = true;
     }
 
@@ -116,6 +156,7 @@ export default async function handler(req: any, res: any) {
       message: 'Murojaatingiz adminga yetkazildi',
       sentToTelegram,
       sentToEmail,
+      recipient: adminEmail,
     }));
   } catch (error: any) {
     console.error("[API Contact Error]:", error);

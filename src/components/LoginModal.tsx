@@ -169,16 +169,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setGoogleFallbackInfo(null);
     setIsGoogleLoading(true);
 
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const isKnownOrigin = currentOrigin.includes('shajarachi.vercel.app') || currentOrigin.includes('shajarachi.uz');
+
     // Safeguard: Foydalanuvchi hech qachon loading holatida qotib qolmasligini kafolatlaymiz
     if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
     googleLoadingTimeoutRef.current = setTimeout(() => {
       setIsGoogleLoading(false);
-      setGoogleFallbackInfo({
-        type: 'timeout',
-        title: "Google avtorizatsiya oynasi javob bermadi",
-        message: "Google avtorizatsiya oynasi o'z vaqtida yakunlanmadi yoki brauzer qalqib chiquvchi oynani to'xtatdi. Iltimos, brauzerda popuplarga ruxsat bering yoki email/parol orqali kiring.",
-      });
-    }, 14000);
+      if (!isKnownOrigin) {
+        setGoogleFallbackInfo({
+          type: 'origin_mismatch',
+          title: "Google OAuth: Domen ruxsati zarur",
+          message: `Google OAuth avtorizatsiyasi xavfsizlik talablariga ko'ra asosiy domenda (https://shajarachi.vercel.app) to'liq ishlaydi. Ushbu sinov muhitida esa Email/Parol yoki Telegram orqali xatosiz kirishingiz mumkin.`,
+          domain: currentOrigin,
+        });
+      } else {
+        setGoogleFallbackInfo({
+          type: 'timeout',
+          title: "Google avtorizatsiya oynasi javob bermadi",
+          message: "Google avtorizatsiya oynasi o'z vaqtida yakunlanmadi yoki brauzer qalqib chiquvchi oynani to'xtatdi. Iltimos, brauzerda popuplarga ruxsat bering yoki email/parol orqali kiring.",
+        });
+      }
+    }, isKnownOrigin ? 12000 : 7000);
 
     // Agar Google Identity SDK umuman yuklanmagan bo'lsa
     if (typeof window !== 'undefined' && !window.google?.accounts?.oauth2) {
@@ -210,8 +222,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     } catch (err: any) {
       const errMsg = err?.message || '';
       const errCode = err?.code;
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-      const isKnownOrigin = currentOrigin.includes('shajarachi.vercel.app') || currentOrigin.includes('shajarachi.uz');
 
       const isPopupBlocked = 
         errCode === 'POPUP_BLOCKED' || 
@@ -232,14 +242,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           title: "Qalqib chiquvchi oyna (popup) bloklandi",
           message: "Brauzeringiz Google oynasini avtomatik to'xtatdi. Brauzer qidiruv qatoridagi popup belgisini bosib, «Ruxsat berish» (Always allow)ni tanlang yoki boshqa usul bilan kiring.",
         });
-      } else if (isCancelled) {
-        // Agar ilova Google Cloud Console'da ro'yxatdan o'tmagan sinov domenida ochilgan bo'lsa
-        // Google oynasida 400: origin_mismatch xatosi chiqqan bo'ladi
+      } else if (isCancelled || !isKnownOrigin) {
         if (!isKnownOrigin) {
           setGoogleFallbackInfo({
             type: 'origin_mismatch',
-            title: "Google OAuth: Domen ruxsati zarur (origin_mismatch)",
-            message: `Google Cloud Console xavfsizlik siyosati bo'yicha ushbu sinov domeni («${currentOrigin}») Google Client ID ning «Authorized JavaScript origins» ro'yxatiga kiritilishi zarur. Saytning asosiy domeni https://shajarachi.vercel.app da esa bu to'liq tasdiqlangan.`,
+            title: "Google OAuth: Domen ruxsati zarur",
+            message: `Google OAuth avtorizatsiyasi xavfsizlik talablariga ko'ra asosiy domenda (https://shajarachi.vercel.app) to'liq ishlaydi. Ushbu sinov muhitida esa Email/Parol yoki Telegram orqali xatosiz kirishingiz mumkin.`,
             domain: currentOrigin,
           });
         } else {
@@ -664,37 +672,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 </p>
 
                 {googleFallbackInfo.domain && (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Google Cloud Console'ga qo'shiladigan URL:
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 rounded-xl p-1.5 px-2.5">
-                      <code className="text-[11px] font-mono text-amber-800 dark:text-amber-300 truncate flex-1 select-all">
-                        {googleFallbackInfo.domain}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (googleFallbackInfo.domain) {
-                            navigator.clipboard.writeText(googleFallbackInfo.domain);
-                            setCopiedDomain(true);
-                            setTimeout(() => setCopiedDomain(false), 2000);
-                          }
-                        }}
-                        className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/50 dark:hover:bg-amber-800/60 text-amber-900 dark:text-amber-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shrink-0"
-                      >
-                        {copiedDomain ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span>Nusxa olindi!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Nusxa olish</span>
-                          </>
-                        )}
-                      </button>
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 bg-amber-100/60 dark:bg-amber-900/30 p-2.5 rounded-xl leading-relaxed">
+                      Google OAuth xizmati rasmiy tasdiqlangan domenda (<strong>https://shajarachi.vercel.app</strong>) to'liq ishlaydi. Ushbu sinov muhitida esa quyidagi Email/Parol yoki Telegram orqali kirishingiz mumkin.
                     </div>
                   </div>
                 )}

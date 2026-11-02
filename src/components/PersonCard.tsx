@@ -13,7 +13,8 @@ import {
   Sparkles,
   Lock,
   Compass,
-  Film
+  Film,
+  Move
 } from 'lucide-react';
 
 interface PersonCardProps {
@@ -35,6 +36,8 @@ interface PersonCardProps {
   isSelected?: boolean;
   isHighlighted?: boolean;
   showLifeline?: boolean;
+  onStartDrag?: (e: React.MouseEvent) => void;
+  isDraggable?: boolean;
 }
 
 export const PersonCard: React.FC<PersonCardProps> = ({
@@ -56,6 +59,8 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   isSelected = false,
   isHighlighted = false,
   showLifeline = true,
+  onStartDrag,
+  isDraggable = false,
 }) => {
   const isMe = person.id === meId;
   const isTemporaryPerspective = activePerspectiveId === person.id;
@@ -128,6 +133,21 @@ export const PersonCard: React.FC<PersonCardProps> = ({
         <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-600 text-white flex items-center gap-1 shadow-sm">
           <Compass className="w-3 h-3 text-amber-200" />
           <span>Vaqtincha tanlangan</span>
+        </div>
+      )}
+
+      {/* Drag handle for owner repositioning */}
+      {isDraggable && onStartDrag && (
+        <div
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onStartDrag(e);
+          }}
+          className="absolute -top-3 right-20 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white dark:bg-slate-800 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 shadow-xs cursor-move flex items-center gap-1 active:scale-95 transition select-none z-10"
+          title="Ushlab surish (kartochkalar orasidagi joyni ochish)"
+        >
+          <Move className="w-2.5 h-2.5" />
+          <span className="hidden sm:inline text-[8px]">Surish</span>
         </div>
       )}
 

@@ -38,6 +38,7 @@ import { syncPersonToSupabase, fetchInviteFromSupabase, loadFamilyDataFromSupaba
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightSidebar } from './components/RightSidebar';
 import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
+import { ContactFeedbackModal } from './components/ContactFeedbackModal';
 import { clearSupabaseSession } from './utils/supabaseClient';
 import { 
   Search, 
@@ -88,6 +89,7 @@ export default function App() {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
+  const [isContactFeedbackModalOpen, setIsContactFeedbackModalOpen] = useState<boolean>(false);
 
   // Relative addition modal state (+ Ota, Ona, Turmush o'rtoq, O'g'il, Qiz)
   const [isAddRelativeModalOpen, setIsAddRelativeModalOpen] = useState<boolean>(false);
@@ -996,6 +998,7 @@ export default function App() {
         isOpen={isStatsModalOpen}
         onClose={() => setIsStatsModalOpen(false)}
         people={state.people}
+        currentUser={state.currentUser}
       />
 
       {/* Chop etish uchun A4 Landscape Print View / PDF Modal */}
@@ -1097,12 +1100,15 @@ export default function App() {
             handleOpenAddRoot();
           }
         }}
-        onOpenContactModal={() => {
-          setViewMode('guest');
-          setTimeout(() => {
-            document.getElementById('boglanish-section')?.scrollIntoView({ behavior: 'smooth' });
-          }, 100);
-        }}
+        onOpenContactModal={() => setIsContactFeedbackModalOpen(true)}
+      />
+
+      {/* Taklif va So'rov Yuborish Modali (In-place modal, sahifadan chiqib ketmasdan) */}
+      <ContactFeedbackModal
+        isOpen={isContactFeedbackModalOpen}
+        onClose={() => setIsContactFeedbackModalOpen(false)}
+        currentUser={state.currentUser}
+        onSuccessToast={(msg) => showToast(msg, 'success')}
       />
 
       {/* Real Hisobdan Chiqishni Tasdiqlash Modali */}

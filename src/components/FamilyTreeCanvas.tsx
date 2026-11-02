@@ -72,6 +72,82 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [showLifelines, setShowLifelines] = useState<boolean>(true);
 
+  // Daraxt yo'nalishi: 'botanical' (ildizlar pastda, avlodlar tepaga qarab o'sadi) yoki 'classic' (ota-bobolar tepada)
+  const [treeOrientation, setTreeOrientation] = useState<'botanical' | 'classic'>(() => {
+    try {
+      const saved = localStorage.getItem('shajarachi_tree_orientation');
+      return (saved === 'classic' || saved === 'botanical') ? saved : 'botanical';
+    } catch {
+      return 'botanical';
+    }
+  });
+
+  // Daraxt egasi tomonidan surilgan kartochkalar koordinatalari (Desktop Drag)
+  const [cardOffsets, setCardOffsets] = useState<Record<string, { x: number; y: number }>>(() => {
+    try {
+      const saved = localStorage.getItem('shajarachi_card_offsets');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const isOwner = !currentUser || currentUser.role === 'owner' || currentUser.isGuest;
+
+  const handleStartDragCard = (personId: string, e: React.MouseEvent) => {
+    if (!isOwner) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialOffset = cardOffsets[personId] || { x: 0, y: 0 };
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const dx = (moveEvent.clientX - startX) / zoom;
+      const dy = (moveEvent.clientY - startY) / zoom;
+      setCardOffsets((prev) => {
+        const updated = {
+          ...prev,
+          [personId]: {
+            x: Math.round(initialOffset.x + dx),
+            y: Math.round(initialOffset.y + dy),
+          },
+        };
+        try {
+          localStorage.setItem('shajarachi_card_offsets', JSON.stringify(updated));
+        } catch {
+          // ignore storage errors
+        }
+        return updated;
+      });
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleResetOffsets = () => {
+    setCardOffsets({});
+    localStorage.removeItem('shajarachi_card_offsets');
+  };
+
+  const toggleOrientation = () => {
+    setTreeOrientation((prev) => {
+      const next = prev === 'botanical' ? 'classic' : 'botanical';
+      try {
+        localStorage.setItem('shajarachi_tree_orientation', next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
   // Touch handling state refs for smooth multi-touch gestures (pinch-to-zoom & touch drag)
   const touchState = useRef<{
     initialDist: number;
@@ -431,14 +507,21 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       ? (singleChild.gender === 'male' || (singleChild.parentId && !singleChildSpouse?.parentId))
       : true;
 
+    const isBotanical = treeOrientation === 'botanical';
+
+    const getOffsetStyle = (id: string): React.CSSProperties => {
+      const offset = cardOffsets[id];
+      return offset ? { transform: `translate(${offset.x}px, ${offset.y}px)` } : {};
+    };
+
     return (
-      <div key={person.id} className="flex flex-col items-center relative">
+      <div key={person.id} className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center relative`}>
         {/* Node Card / Couple Unit */}
         <div className="z-10 interactive-control flex items-center justify-center relative">
           {spouse && rightPerson ? (
             <div className="flex items-center justify-center gap-2 sm:gap-3 relative">
               {/* Left Card */}
-              <div className="relative">
+              <div className="relative transition-transform duration-75" style={getOffsetStyle(leftPerson.id)}>
                 <PersonCard
                   person={leftPerson}
                   people={people}
@@ -458,10 +541,12 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
                   isSelected={selectedPersonId === leftPerson.id}
                   isHighlighted={isMatch(leftPerson)}
+                  isDraggable={isOwner}
+                  onStartDrag={(e) => handleStartDragCard(leftPerson.id, e)}
                 />
               </div>
 
-              {/* Horizontal Bridge Line with Couple Heart Badge (O'rtasidan tortilgan chiziq) */}
+              {/* Horizontal Bridge Line with Couple Heart Badge (O'rtasidan tortilgan rishta) */}
               <div className="flex items-center justify-center shrink-0 relative px-1 sm:px-2 z-10">
                 <div className="w-5 sm:w-8 h-1 bg-gradient-to-r from-emerald-500 via-rose-400 to-rose-500 rounded-full shadow-xs" />
                 <div
@@ -474,7 +559,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               </div>
 
               {/* Right Card */}
-              <div className="relative">
+              <div className="relative transition-transform duration-75" style={getOffsetStyle(rightPerson.id)}>
                 <PersonCard
                   person={rightPerson}
                   people={people}
@@ -494,15 +579,13 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
                   isSelected={selectedPersonId === rightPerson.id}
                   isHighlighted={isMatch(rightPerson)}
+                  isDraggable={isOwner}
+                  onStartDrag={(e) => handleStartDragCard(rightPerson.id, e)}
                 />
               </div>
             </div>
-          ) : isSingleChildWithSpouse ? (
-            /* Single parent (Bobo) aligned directly above biological child (Muxiddin) */
-            <div className="flex items-center justify-center relative">
-              {!isSingleChildLeftInCouple && (
-                <div className="w-72 sm:w-[328px] shrink-0 pointer-events-none" />
-              )}
+          ) : (
+            <div className="relative transition-transform duration-75" style={getOffsetStyle(person.id)}>
               <PersonCard
                 person={person}
                 people={people}
@@ -522,83 +605,96 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
                 isSelected={selectedPersonId === person.id}
                 isHighlighted={isMatch(person)}
+                isDraggable={isOwner}
+                onStartDrag={(e) => handleStartDragCard(person.id, e)}
               />
-              {isSingleChildLeftInCouple && (
-                <div className="w-72 sm:w-[328px] shrink-0 pointer-events-none" />
-              )}
             </div>
-          ) : (
-            <PersonCard
-              person={person}
-              people={people}
-              meId={meId}
-              activePerspectiveId={activePerspectiveId}
-              currentUser={currentUser}
-              hasChildren={hasChildren}
-              isExpanded={isExpanded}
-              showLifeline={showLifelines}
-              onToggleExpand={() => toggleExpand(person.id)}
-              onSelect={onSelectPerson}
-              onEdit={onEditPerson}
-              onAddChild={onAddChild}
-              onAddParent={onAddParent}
-              onOpenAddRelative={onOpenAddRelative}
-              onSetTemporaryPerspective={onSetTemporaryPerspective}
-              onUnauthorizedEditAttempt={onUnauthorizedEditAttempt}
-              isSelected={selectedPersonId === person.id}
-              isHighlighted={isMatch(person)}
-            />
           )}
         </div>
 
         {/* Children Branch */}
         {hasChildren && isExpanded && (
-          <div className="flex flex-col items-center mt-6 sm:mt-8 relative w-full">
-            {/* Vertical connector line from middle of couple (heart) or single parent card down to children */}
-            {isSingleChildWithSpouse ? (
-              <div 
-                className="w-0.5 h-7 sm:h-8 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full absolute -top-0"
-                style={{
-                  left: isSingleChildLeftInCouple ? '128px' : 'calc(100% - 128px)',
-                  transform: 'translateX(-50%)',
-                }}
-              />
-            ) : (
-              <div className="w-0.5 h-7 sm:h-8 bg-gradient-to-b from-rose-400 via-emerald-500 to-slate-400 dark:to-slate-600 rounded-full" />
-            )}
+          <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-6 sm:mb-8' : 'mt-6 sm:mt-8'} relative w-full`}>
+            {/* Vertical connector stem from parent/couple center to junction line */}
+            <div
+              className={`w-0.5 h-6 sm:h-7 ${
+                isBotanical
+                  ? 'bg-gradient-to-t from-emerald-500 via-teal-500 to-emerald-600'
+                  : 'bg-gradient-to-b from-emerald-500 via-teal-500 to-emerald-600'
+              } rounded-full`}
+            />
 
-            {/* Branch to children */}
-            <div className="flex items-start justify-center gap-8 sm:gap-10 relative pt-4">
-              {/* Rounded/curved horizontal connector bar across multiple children */}
-              {children.length > 1 && (
-                <div
-                  className="absolute top-0 h-0.5 bg-gradient-to-r from-emerald-500/80 via-teal-500 to-emerald-500/80 rounded-full shadow-xs"
-                  style={{
-                    left: 'calc(132px)',
-                    right: 'calc(132px)',
-                  }}
-                />
-              )}
-
-              {/* Render each child with top branch connector */}
-              {children.map((child) => {
-                const childSpouseId = child.spouseId || allPeopleList.find((other) => other.spouseId === child.id)?.id;
-                const childSpouse = childSpouseId ? people[childSpouseId] : null;
-
-                // When child is in a couple, incoming branch lands directly on child's card
-                const isChildLeftInCouple = child.gender === 'male' || (child.parentId && !childSpouse?.parentId);
-                const topConnectorStyle: React.CSSProperties = childSpouse
-                  ? { left: isChildLeftInCouple ? '128px' : 'calc(100% - 128px)', transform: 'translateX(-50%)' }
-                  : { left: '50%', transform: 'translateX(-50%)' };
+            {/* Branch to children with mathematically bounded curved sibling connectors (eliminates stray lines) */}
+            <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
+              {children.map((child, idx) => {
+                const isOnlyChild = children.length === 1;
+                const isFirst = idx === 0;
+                const isLast = idx === children.length - 1;
 
                 return (
-                  <div key={child.id} className="flex flex-col items-center relative">
-                    {/* Top vertical connector from horizontal bar or parent directly down to child */}
-                    <div 
-                      className="w-0.5 h-4 bg-gradient-to-b from-emerald-500/80 to-slate-400 dark:to-slate-600 absolute -top-4 rounded-full" 
-                      style={topConnectorStyle}
-                    />
-                    {renderTreeNode(child.id, level + 1)}
+                  <div key={child.id} className="flex flex-col items-center relative px-2.5 sm:px-4">
+                    {/* Top Curved Connector for Classical (Top-Down) Mode */}
+                    {!isBotanical && !isOnlyChild && (
+                      <div className="w-full h-4 relative pointer-events-none">
+                        {isFirst && (
+                          <div
+                            className="absolute top-0 right-0 h-4 border-t-2 border-l-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-tl-xl"
+                            style={{ left: '50%' }}
+                          />
+                        )}
+                        {isLast && (
+                          <div
+                            className="absolute top-0 left-0 h-4 border-t-2 border-r-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-tr-xl"
+                            style={{ right: '50%' }}
+                          />
+                        )}
+                        {!isFirst && !isLast && (
+                          <>
+                            <div className="absolute top-0 left-0 right-0 border-t-2 border-emerald-500/85 dark:border-emerald-400/85" />
+                            <div className="w-0.5 h-4 bg-emerald-500/85 dark:bg-emerald-400/85 absolute top-0 left-1/2 -translate-x-1/2 rounded-full" />
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Single Child Direct Stem Connector for Classical Mode */}
+                    {!isBotanical && isOnlyChild && (
+                      <div className="w-0.5 h-3 bg-emerald-500/85 dark:bg-emerald-400/85 rounded-full pointer-events-none" />
+                    )}
+
+                    {/* Subtree for this child */}
+                    <div className={isBotanical ? (isOnlyChild ? 'pb-1' : 'pb-0') : (isOnlyChild ? 'pt-1' : 'pt-0')}>
+                      {renderTreeNode(child.id, level + 1)}
+                    </div>
+
+                    {/* Single Child Direct Stem Connector for Botanical Mode */}
+                    {isBotanical && isOnlyChild && (
+                      <div className="w-0.5 h-3 bg-emerald-500/85 dark:bg-emerald-400/85 rounded-full pointer-events-none" />
+                    )}
+
+                    {/* Bottom Curved Connector for Botanical (Bottom-Up) Mode */}
+                    {isBotanical && !isOnlyChild && (
+                      <div className="w-full h-4 relative pointer-events-none">
+                        {isFirst && (
+                          <div
+                            className="absolute bottom-0 right-0 h-4 border-b-2 border-l-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-bl-xl"
+                            style={{ left: '50%' }}
+                          />
+                        )}
+                        {isLast && (
+                          <div
+                            className="absolute bottom-0 left-0 h-4 border-b-2 border-r-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-br-xl"
+                            style={{ right: '50%' }}
+                          />
+                        )}
+                        {!isFirst && !isLast && (
+                          <>
+                            <div className="absolute bottom-0 left-0 right-0 border-b-2 border-emerald-500/85 dark:border-emerald-400/85" />
+                            <div className="w-0.5 h-4 bg-emerald-500/85 dark:bg-emerald-400/85 absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full" />
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -653,6 +749,51 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
       {/* Floating Canvas Controls (Mobile-Responsive Compact Toolbar) */}
       <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex items-center gap-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1 rounded-xl sm:rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-lg">
+        {/* Daraxt Yo'nalishi (Tabiiy Daraxt vs Klassik Nasabnoma) */}
+        <button
+          id="btn-toggle-tree-orientation"
+          onClick={toggleOrientation}
+          className={`px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 shadow-xs ${
+            treeOrientation === 'botanical'
+              ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+              : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+          }`}
+          title={
+            treeOrientation === 'botanical'
+              ? "Klassik shajaraga o'tish (Tepadan pastga)"
+              : "Tabiiy daraxtga o'tish (Pastdan tepaga o'suvchi)"
+          }
+        >
+          {treeOrientation === 'botanical' ? (
+            <>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">🌱 Tabiiy daraxt</span>
+              <span className="sm:hidden">🌱 Daraxt</span>
+            </>
+          ) : (
+            <>
+              <Compass className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span className="hidden sm:inline">📜 Klassik shajara</span>
+              <span className="sm:hidden">📜 Klassik</span>
+            </>
+          )}
+        </button>
+
+        {/* Surilgan kartochkalarni tiklash (agar mavjud bo'lsa) */}
+        {Object.keys(cardOffsets).length > 0 && (
+          <button
+            id="btn-reset-card-positions"
+            onClick={handleResetOffsets}
+            className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors flex items-center gap-1"
+            title="Kartochkalar surilgan joylashuvini dastlabki holatga qaytarish"
+          >
+            <RotateCcw className="w-3 h-3 text-slate-500" />
+            <span className="hidden md:inline">Joylashuvni tiklash</span>
+          </button>
+        )}
+
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
         {/* Zoom In */}
         <button
           id="btn-zoom-in"
@@ -801,7 +942,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               </div>
             </div>
           ) : displayRoots.length > 0 ? (
-            <div className="flex items-start justify-center gap-16 relative">
+            <div className={`flex ${treeOrientation === 'botanical' ? 'items-end' : 'items-start'} justify-center gap-16 relative`}>
               {isLoading && (
                 <div className="absolute inset-0 bg-white/20 dark:bg-slate-950/20 backdrop-blur-[1px] rounded-3xl pointer-events-none z-10" />
               )}

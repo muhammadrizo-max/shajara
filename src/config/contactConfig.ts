@@ -34,8 +34,8 @@ export const CONTACT_SETTINGS = {
   // 2) `adminEmail` ga o'z emailingizni (masalan: info@shajarachi.uz yoki admin@shajarachi.uz) yozasiz
   // Bo'ldi! Tizim avtomatik ravishda xabarlarni emailga ham yo'naltiradi.
   email: {
-    enabled: false, // Kelajakda email ochilganda buni `true` ga o'zgartirasiz
-    adminEmail: 'admin@shajarachi.uz', // Kelajakdagi rasmiy email manzilingiz
+    enabled: true, // admin@shajarachi.uz uchun xabarnomalar faollashtirildi
+    adminEmail: 'admin@shajarachi.uz', // Rasmiy email manzili
     senderName: 'Shajarachi Portali',
     subjectPrefix: '[Shajarachi.uz Murojaat]',
   },
