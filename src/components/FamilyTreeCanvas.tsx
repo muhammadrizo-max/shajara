@@ -188,7 +188,7 @@ const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         }
       }
 
-      drawMoon(dark);
+      if (dark) drawMoon(dark);
       animRef.current = requestAnimationFrame(frame);
     }
 
@@ -791,7 +791,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
           <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-6 sm:mb-8' : 'mt-6 sm:mt-8'} relative w-full`}>
             {/* Vertical connector stem from parent/couple center to junction line */}
             <div
-              className={`w-0.5 h-6 sm:h-7 ${
+              className={`w-0.5 h-4 sm:h-5 ${
                 isBotanical
                   ? 'bg-gradient-to-t from-emerald-500 via-teal-500 to-emerald-600'
                   : 'bg-gradient-to-b from-emerald-500 via-teal-500 to-emerald-600'
@@ -806,7 +806,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 const isLast = idx === children.length - 1;
 
                 return (
-                  <div key={child.id} className="flex flex-col items-center relative px-1 sm:px-1.5">
+                  <div key={child.id} className="flex flex-col items-center relative px-0.5">
                     {/* Top Curved Connector for Classical (Top-Down) Mode */}
                     {!isBotanical && !isOnlyChild && (
                       <div className="w-full h-4 relative pointer-events-none">
@@ -1110,7 +1110,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               </div>
             </div>
           ) : displayRoots.length > 0 ? (
-            <div className={`flex ${treeOrientation === 'botanical' ? 'items-end' : 'items-start'} justify-center gap-16 relative`}>
+            <div className={`flex ${treeOrientation === 'botanical' ? 'items-end' : 'items-start'} justify-center gap-6 relative`}>
               {isLoading && (
                 <div className="absolute inset-0 bg-white/20 dark:bg-slate-950/20 backdrop-blur-[1px] rounded-3xl pointer-events-none z-10" />
               )}
