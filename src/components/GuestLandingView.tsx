@@ -729,8 +729,15 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                     <span>Domen: shajarachi.uz</span>
                   </span>
                 </li>
-                <li className="text-[11px] text-slate-400">
-                  Email: admin@shajarachi.uz
+                <li>
+                  <a href="https://t.me/visioncoregroup" target="_blank" rel="noreferrer" className="hover:text-white flex items-center gap-1.5 text-[#24A1DE]">
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Kanal: @visioncoregroup</span>
+                  </a>
+                </li>
+                <li className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                  <Globe className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span>admin@shajarachi.uz</span>
                 </li>
               </ul>
             </div>
