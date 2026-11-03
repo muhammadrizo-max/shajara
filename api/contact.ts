@@ -78,7 +78,7 @@ export default async function handler(req: any, res: any) {
 
     // 1. Telegram Bot Adminiga yuborish
     const botToken = process.env.TELEGRAM_BOT_TOKEN || settings?.telegram?.botToken;
-    const adminChatId = process.env.ADMIN_TELEGRAM_CHAT_ID || settings?.telegram?.adminChatId || '716281734';
+    const adminChatId = process.env.ADMIN_TELEGRAM_CHAT_ID || settings?.telegram?.adminChatId;
 
     if (botToken && adminChatId) {
       try {
@@ -103,7 +103,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // 2. Emailga yuborish (admin@shajarachi.uz)
-    const adminEmail = process.env.ADMIN_EMAIL || settings?.email?.adminEmail || 'admin@shajarachi.uz';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@shajarachi.uz';
     const emailSubject = `${settings?.email?.subjectPrefix || '[Shajarachi.uz Murojaat]'} Yangi xabar: ${contactInfo}`;
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
@@ -145,8 +145,7 @@ export default async function handler(req: any, res: any) {
         console.warn("[API Contact] Email yuborishda xatolik:", mailErr);
       }
     } else {
-      console.info(`[API Contact] RESEND_API_KEY mavjud emas. Murojaat ${adminEmail} qabuliga tayyorlandi.`);
-      sentToEmail = true;
+      console.info(`[API Contact] RESEND_API_KEY mavjud emas. Email yuborilmadi.`);
     }
 
     res.statusCode = 200;
