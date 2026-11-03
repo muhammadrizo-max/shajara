@@ -201,7 +201,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
   // Center-based zoom calculation (avoids drifting to top-left)
   const applyZoom = (newZoomRaw: number, clientX?: number, clientY?: number) => {
-    const newZoom = Math.min(Math.max(newZoomRaw, 0.25), 2.5);
+    const newZoom = Math.min(Math.max(newZoomRaw, 0.10), 2.5);
     if (!containerRef.current) {
       setZoom(newZoom);
       return;
@@ -225,7 +225,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   // Mouse wheel zoom relative to cursor position
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
+    const zoomFactor = e.deltaY < 0 ? 1.07 : 0.93;
     applyZoom(zoom * zoomFactor, e.clientX, e.clientY);
   };
 
@@ -292,7 +292,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       const t2 = e.touches[1];
       const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
       const scale = dist / (touchState.current.initialDist || 1);
-      const targetZoom = Math.min(Math.max(touchState.current.initialZoom * scale, 0.25), 2.5);
+      const targetZoom = Math.min(Math.max(touchState.current.initialZoom * (scale * 1.25), 0.10), 2.5);
 
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
@@ -509,13 +509,16 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
     const isBotanical = treeOrientation === 'botanical';
 
-    const getOffsetStyle = (id: string): React.CSSProperties => {
-      const offset = cardOffsets[id];
-      return offset ? { transform: `translate(${offset.x}px, ${offset.y}px)` } : {};
-    };
+    const getOffsetStyle = (_id: string): React.CSSProperties => ({});
+
+    // Butun node offset — karta va undan chiqqan barcha chiziqlar birgalikda siljiydi
+    const nodeOffset = cardOffsets[person.id] || (spouse ? cardOffsets[spouse.id] : null) || null;
+    const nodeOffsetStyle: React.CSSProperties = nodeOffset
+      ? { transform: `translate(${nodeOffset.x}px, ${nodeOffset.y}px)`, transition: 'transform 0.05s linear', zIndex: nodeOffset ? 20 : undefined }
+      : {};
 
     return (
-      <div key={person.id} className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center relative`}>
+      <div key={person.id} className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center relative`} style={nodeOffsetStyle}>
         {/* Node Card / Couple Unit */}
         <div className="z-10 interactive-control flex items-center justify-center relative">
           {spouse && rightPerson ? (
@@ -624,15 +627,39 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               } rounded-full`}
             />
 
-            {/* Branch to children with mathematically bounded curved sibling connectors (eliminates stray lines) */}
-            <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
+            {/* Branch to children — 4+ bolada wrap (ustma-ust) layout */}
+            {(() => {
+              const WRAP_THRESHOLD = 4;
+              const useWrap = children.length >= WRAP_THRESHOLD;
+              if (useWrap) {
+                // Ustma-ust: bolalarni 2 qatorga bo'lib ko'rsatish
+                const half = Math.ceil(children.length / 2);
+                const rows = [children.slice(0, half), children.slice(half)];
+                return (
+                  <div className={`flex flex-col ${isBotanical ? 'items-end' : 'items-start'} items-center gap-2`}>
+                    {rows.map((row, rowIdx) => (
+                      <div key={rowIdx} className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
+                        {row.map((child) => (
+                          <div key={child.id} className="flex flex-col items-center relative px-1 sm:px-1.5">
+                            <div className="w-0.5 h-3 bg-emerald-500/85 dark:bg-emerald-400/85 rounded-full pointer-events-none" />
+                            <div>{renderTreeNode(child.id, level + 1)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            {children.length < 4 && <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
               {children.map((child, idx) => {
                 const isOnlyChild = children.length === 1;
                 const isFirst = idx === 0;
                 const isLast = idx === children.length - 1;
 
                 return (
-                  <div key={child.id} className="flex flex-col items-center relative px-2.5 sm:px-4">
+                  <div key={child.id} className="flex flex-col items-center relative px-1 sm:px-1.5">
                     {/* Top Curved Connector for Classical (Top-Down) Mode */}
                     {!isBotanical && !isOnlyChild && (
                       <div className="w-full h-4 relative pointer-events-none">
@@ -698,7 +725,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </div>
         )}
       </div>
