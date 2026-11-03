@@ -43,6 +43,177 @@ interface FamilyTreeCanvasProps {
   onOpenTelegramBotModal?: () => void;
 }
 
+// ─── Sky Canvas Component ─────────────────────────────────────────────────────
+function getRealMoonPhase(): number {
+  const knownNewMoon = new Date(Date.UTC(2026, 0, 18, 11, 52, 0));
+  const diffDays = (Date.now() - knownNewMoon.getTime()) / 86400000;
+  const synodicMonth = 29.53058770576;
+  let phase = (diffDays % synodicMonth) / synodicMonth;
+  if (phase < 0) phase += 1;
+  return phase;
+}
+
+const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+  const stateRef = useRef<{
+    stars: { x: number; y: number; r: number; alpha: number; speed: number }[];
+    clouds: { x: number; y: number; scale: number; speed: number; opacity: number }[];
+    shooting: { x: number; y: number; len: number; speed: number; alpha: number }[];
+    w: number; h: number;
+  }>({ stars: [], clouds: [], shooting: [], w: 0, h: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const s = stateRef.current;
+
+    function init() {
+      s.w = canvas!.width = canvas!.offsetWidth;
+      s.h = canvas!.height = canvas!.offsetHeight;
+      const count = Math.floor((s.w * s.h) / 2500);
+      s.stars = Array.from({ length: count }, () => ({
+        x: Math.random() * s.w, y: Math.random() * s.h * 0.8,
+        r: Math.random() * 1.4 + 0.3, alpha: Math.random(),
+        speed: Math.random() * 0.012 + 0.004,
+      }));
+      s.clouds = Array.from({ length: 6 }, () => ({
+        x: Math.random() * s.w, y: Math.random() * s.h * 0.4,
+        scale: Math.random() * 0.8 + 0.6, speed: Math.random() * 0.15 + 0.05,
+        opacity: Math.random() * 0.35 + 0.25,
+      }));
+    }
+
+    function drawMoon(dark: boolean) {
+      const mx = s.w * 0.75, my = s.h * 0.2;
+      const r = Math.min(s.w, s.h) * 0.045 + 14;
+      const phase = getRealMoonPhase();
+      const fullness = 1 - Math.abs(phase - 0.5) * 2;
+
+      if (dark) {
+        const gr = r * (2.2 + fullness * 2.0);
+        const glow = ctx.createRadialGradient(mx, my, r * 0.8, mx, my, gr);
+        glow.addColorStop(0, `rgba(215,230,255,${0.06 + fullness * 0.14})`);
+        glow.addColorStop(0.5, `rgba(180,205,245,${(0.06 + fullness * 0.14) * 0.4})`);
+        glow.addColorStop(1, 'rgba(150,180,220,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, gr, 0, Math.PI * 2); ctx.fill();
+      }
+
+      ctx.save();
+      ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = dark ? '#e2ebf8' : '#f0f4f8';
+      ctx.fillRect(mx - r, my - r, r * 2, r * 2);
+      ctx.fillStyle = dark ? 'rgba(170,185,205,0.25)' : 'rgba(180,190,200,0.15)';
+      ctx.beginPath();
+      ctx.arc(mx - r * 0.3, my - r * 0.2, r * 0.22, 0, Math.PI * 2);
+      ctx.arc(mx + r * 0.2, my + r * 0.3, r * 0.18, 0, Math.PI * 2);
+      ctx.arc(mx + r * 0.1, my - r * 0.4, r * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      const shadow = (phase - 0.5) * 2;
+      ctx.fillStyle = dark ? '#0a1128' : '#7dd3fc';
+      ctx.beginPath();
+      if (phase < 0.5) {
+        ctx.arc(mx, my, r, Math.PI * 0.5, Math.PI * 1.5, false);
+        ctx.ellipse(mx, my, r * Math.abs(shadow), r, 0, Math.PI * 1.5, Math.PI * 0.5, phase > 0.25);
+      } else {
+        ctx.arc(mx, my, r, Math.PI * 0.5, Math.PI * 1.5, true);
+        ctx.ellipse(mx, my, r * Math.abs(shadow), r, 0, Math.PI * 1.5, Math.PI * 0.5, phase < 0.75);
+      }
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function frame() {
+      const dark = document.documentElement.classList.contains('dark');
+      ctx.clearRect(0, 0, s.w, s.h);
+
+      // Sky gradient
+      const sky = ctx.createLinearGradient(0, 0, 0, s.h);
+      if (dark) {
+        sky.addColorStop(0, '#040814');
+        sky.addColorStop(0.5, '#0a1128');
+        sky.addColorStop(1, '#101c3d');
+      } else {
+        sky.addColorStop(0, '#38bdf8');
+        sky.addColorStop(0.5, '#7dd3fc');
+        sky.addColorStop(1, '#bae6fd');
+      }
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, s.w, s.h);
+
+      if (dark) {
+        // Stars
+        for (const star of s.stars) {
+          star.alpha += star.speed;
+          if (star.alpha > 1 || star.alpha < 0.2) star.speed = -star.speed;
+          ctx.fillStyle = `rgba(255,255,255,${Math.max(0, star.alpha)})`;
+          ctx.beginPath(); ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2); ctx.fill();
+        }
+        // Shooting stars
+        if (Math.random() < 0.012) {
+          s.shooting.push({ x: Math.random() * s.w, y: Math.random() * s.h * 0.4, len: Math.random() * 80 + 40, speed: Math.random() * 8 + 4, alpha: 1 });
+        }
+        for (let i = s.shooting.length - 1; i >= 0; i--) {
+          const ss = s.shooting[i];
+          ss.x -= ss.speed; ss.y += ss.speed * 0.5; ss.alpha -= 0.02;
+          if (ss.alpha <= 0) { s.shooting.splice(i, 1); continue; }
+          ctx.strokeStyle = `rgba(255,255,255,${ss.alpha})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(ss.x, ss.y); ctx.lineTo(ss.x + ss.len, ss.y - ss.len * 0.5); ctx.stroke();
+        }
+      } else {
+        // Sun
+        const sx = s.w * 0.8, sy = s.h * 0.2, sr = Math.min(s.w, s.h) * 0.05 + 10;
+        const sunGlow = ctx.createRadialGradient(sx, sy, sr * 0.5, sx, sy, sr * 3.5);
+        sunGlow.addColorStop(0, 'rgba(253,224,71,0.6)');
+        sunGlow.addColorStop(0.4, 'rgba(251,146,60,0.2)');
+        sunGlow.addColorStop(1, 'rgba(251,146,60,0)');
+        ctx.fillStyle = sunGlow;
+        ctx.beginPath(); ctx.arc(sx, sy, sr * 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fillStyle = '#fef08a'; ctx.shadowColor = '#fde047'; ctx.shadowBlur = 25; ctx.fill(); ctx.shadowBlur = 0;
+        // Clouds
+        for (const cloud of s.clouds) {
+          cloud.x += cloud.speed;
+          if (cloud.x - 150 > s.w) cloud.x = -150;
+          ctx.fillStyle = `rgba(255,255,255,${cloud.opacity})`;
+          ctx.beginPath();
+          const cx = cloud.x, cy = cloud.y, sc = cloud.scale;
+          ctx.arc(cx, cy, 30 * sc, 0, Math.PI * 2);
+          ctx.arc(cx + 25 * sc, cy - 15 * sc, 35 * sc, 0, Math.PI * 2);
+          ctx.arc(cx + 60 * sc, cy, 25 * sc, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      drawMoon(dark);
+      animRef.current = requestAnimationFrame(frame);
+    }
+
+    const ro = new ResizeObserver(() => { init(); });
+    ro.observe(canvas);
+    init();
+    animRef.current = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      ro.disconnect();
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ zIndex: 0 }}
+    />
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   people,
   rootId,
@@ -627,32 +798,8 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               } rounded-full`}
             />
 
-            {/* Branch to children — 4+ bolada wrap (ustma-ust) layout */}
-            {(() => {
-              const WRAP_THRESHOLD = 4;
-              const useWrap = children.length >= WRAP_THRESHOLD;
-              if (useWrap) {
-                // Ustma-ust: bolalarni 2 qatorga bo'lib ko'rsatish
-                const half = Math.ceil(children.length / 2);
-                const rows = [children.slice(0, half), children.slice(half)];
-                return (
-                  <div className={`flex flex-col ${isBotanical ? 'items-end' : 'items-start'} items-center gap-2`}>
-                    {rows.map((row, rowIdx) => (
-                      <div key={rowIdx} className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
-                        {row.map((child) => (
-                          <div key={child.id} className="flex flex-col items-center relative px-1 sm:px-1.5">
-                            <div className="w-0.5 h-3 bg-emerald-500/85 dark:bg-emerald-400/85 rounded-full pointer-events-none" />
-                            <div>{renderTreeNode(child.id, level + 1)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                );
-              }
-              return null;
-            })()}
-            {children.length < 4 && <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
+            {/* Branch: barcha bolalar bitta gorizontal qatorda */}
+            <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
               {children.map((child, idx) => {
                 const isOnlyChild = children.length === 1;
                 const isFirst = idx === 0;
@@ -725,7 +872,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   </div>
                 );
               })}
-            </div>}
+            </div>
           </div>
         )}
       </div>
@@ -736,7 +883,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     <div
       ref={containerRef}
       id="family-tree-canvas-viewport"
-      className="relative w-full h-full min-h-0 flex-1 bg-slate-50/70 dark:bg-slate-950 overflow-hidden select-none cursor-grab active:cursor-grabbing border border-slate-200/80 dark:border-slate-800/80 rounded-2xl shadow-inner touch-none"
+      className="relative w-full h-full min-h-0 flex-1 overflow-hidden select-none cursor-grab active:cursor-grabbing border border-slate-200/80 dark:border-slate-800/80 rounded-2xl shadow-inner touch-none"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -747,14 +894,8 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {/* Background Blueprint Grid Pattern */}
-      <div 
-        className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20"
-        style={{
-          backgroundImage: `radial-gradient(circle, #94a3b8 1px, transparent 1px)`,
-          backgroundSize: '24px 24px',
-        }}
-      />
+      {/* Dynamic Sky Background Canvas */}
+      <SkyCanvas isDark={document.documentElement.classList.contains('dark')} />
 
       {/* Temporary Perspective Active Top Banner */}
       {activePerspectivePerson && (
@@ -1012,4 +1153,3 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     </div>
   );
 };
-
