@@ -1,4 +1,16 @@
-// CORS
+/**
+ * /api/tree — Shajara ma'lumotlarini Supabase'ga saqlash/yuklash
+ *
+ * GET    /api/tree?userId=...&email=...   → { success, state, updatedAt }
+ * POST   /api/tree  body: { userId, email, state } → { success }
+ * DELETE /api/tree?userId=...&email=...  → { success }
+ *
+ * Supabase family_trees jadvali:
+ *   user_id    TEXT UNIQUE  (UUID yoki "email:user@mail.com")
+ *   tree_data  JSONB
+ *   updated_at TIMESTAMPTZ
+ */
+
 const ALLOWED = [
   'https://shajarachi.vercel.app',
   'https://shajarachi.uz',
@@ -7,13 +19,10 @@ const ALLOWED = [
   'http://127.0.0.1:3000',
 ];
 
-function cors(req: any, res: any) {
+function setCors(req: any, res: any) {
   const o = req.headers?.origin;
-  if (o && (ALLOWED.includes(o) || o.endsWith('.vercel.app') || o.endsWith('.shajarachi.uz'))) {
-    res.setHeader('Access-Control-Allow-Origin', o);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
+  const allow = o && (ALLOWED.includes(o) || o.endsWith('.vercel.app') || o.endsWith('.shajarachi.uz'));
+  res.setHeader('Access-Control-Allow-Origin', allow ? o : '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -32,72 +41,61 @@ function parseBody(req: any): Promise<any> {
   });
 }
 
-// Supabase REST helpers (no SDK needed)
-function sbUrl() {
-  const u = process.env.SUPABASE_URL;
-  if (!u) throw new Error('SUPABASE_URL env yo\'q');
-  return u.replace(/\/$/, '');
+// Supabase REST (SDK kerak emas)
+function sbBase() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_URL va SUPABASE_SERVICE_ROLE_KEY env kerak');
+  return { url: url.replace(/\/$/, ''), key };
 }
-function sbKey() {
-  const k = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!k) throw new Error('SUPABASE_SERVICE_ROLE_KEY env yo\'q');
-  return k;
-}
-function sbHeaders() {
+
+function sbHeaders(key: string) {
   return {
     'Content-Type': 'application/json',
-    'apikey': sbKey(),
-    'Authorization': `Bearer ${sbKey()}`,
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
   };
 }
 
-async function sbGet(userId: string) {
+async function sbGet(userId: string): Promise<{ tree_data: any; updated_at: string } | null> {
+  const { url, key } = sbBase();
   const res = await fetch(
-    `${sbUrl()}/rest/v1/family_trees?user_id=eq.${encodeURIComponent(userId)}&select=tree_data,updated_at&limit=1`,
-    { headers: { ...sbHeaders(), 'Prefer': 'return=representation' } }
+    `${url}/rest/v1/family_trees?user_id=eq.${encodeURIComponent(userId)}&select=tree_data,updated_at&limit=1`,
+    { headers: sbHeaders(key) }
   );
   if (!res.ok) return null;
   const rows = await res.json();
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }
 
-async function sbUpsert(userId: string, state: any) {
-  const now = new Date().toISOString();
-  const res = await fetch(
-    `${sbUrl()}/rest/v1/family_trees`,
-    {
-      method: 'POST',
-      headers: {
-        ...sbHeaders(),
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
-      },
-      body: JSON.stringify({ user_id: userId, tree_data: state, updated_at: now }),
-    }
-  );
+async function sbUpsert(userId: string, state: any): Promise<boolean> {
+  const { url, key } = sbBase();
+  const res = await fetch(`${url}/rest/v1/family_trees`, {
+    method: 'POST',
+    headers: {
+      ...sbHeaders(key),
+      'Prefer': 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      tree_data: state,
+      updated_at: new Date().toISOString(),
+    }),
+  });
   return res.ok || res.status === 201;
 }
 
-async function sbDelete(userId: string) {
+async function sbDelete(userId: string): Promise<boolean> {
+  const { url, key } = sbBase();
   const res = await fetch(
-    `${sbUrl()}/rest/v1/family_trees?user_id=eq.${encodeURIComponent(userId)}`,
-    { method: 'DELETE', headers: sbHeaders() }
+    `${url}/rest/v1/family_trees?user_id=eq.${encodeURIComponent(userId)}`,
+    { method: 'DELETE', headers: sbHeaders(key) }
   );
   return res.ok;
 }
 
-/**
- * GET  /api/tree?userId=...&email=...
- * POST /api/tree { userId, email, state }
- * DELETE /api/tree?userId=...&email=...
- *
- * Supabase family_trees jadvali:
- *   user_id TEXT PRIMARY KEY,
- *   tree_data JSONB,
- *   updated_at TIMESTAMPTZ
- */
 export default async function handler(req: any, res: any) {
-  cors(req, res);
-
+  setCors(req, res);
   if (req.method === 'OPTIONS') { res.statusCode = 200; res.end(); return; }
 
   const send = (code: number, data: object) => {
@@ -114,16 +112,12 @@ export default async function handler(req: any, res: any) {
     if (!userId && !email) return send(400, { success: false, error: 'userId yoki email kerak' });
 
     try {
-      // Email ustuvor (email: prefix bilan saqlangan)
-      const keys = [
-        email  ? `email:${email}` : null,
-        userId ? userId           : null,
-      ].filter(Boolean) as string[];
-
+      // Avval UUID, keyin email: prefix bilan qidirish
+      const keys = [userId, email ? `email:${email}` : null].filter(Boolean) as string[];
       for (const key of keys) {
         const row = await sbGet(key);
         if (row?.tree_data && Object.keys(row.tree_data.people || {}).length > 0) {
-          return send(200, { success: true, state: row.tree_data, updatedAt: row.updated_at, source: 'supabase' });
+          return send(200, { success: true, state: row.tree_data, updatedAt: row.updated_at });
         }
       }
       return send(200, { success: false, notFound: true });
@@ -138,19 +132,30 @@ export default async function handler(req: any, res: any) {
     try {
       const body = await parseBody(req);
       const { userId, email, state } = body;
-      if (!state?.people) return send(400, { success: false, error: "State formati noto'g'ri" });
-      if (!userId && !email) return send(400, { success: false, error: 'userId yoki email kerak' });
 
-      const keys = [
-        email  ? `email:${email}` : null,
-        userId ? userId           : null,
-      ].filter(Boolean) as string[];
-
-      for (const key of keys) {
-        const ok = await sbUpsert(key, state);
-        if (!ok) console.warn('[Tree POST] upsert failed for key:', key);
+      if (!state || typeof state !== 'object' || !state.people) {
+        return send(400, { success: false, error: "state.people mavjud emas" });
       }
-      return send(200, { success: true, message: 'Supabasega saqlandi' });
+      if (!userId && !email) {
+        return send(400, { success: false, error: 'userId yoki email kerak' });
+      }
+
+      let saved = false;
+      // userId (UUID) bilan saqlash
+      if (userId) {
+        const ok = await sbUpsert(userId, state);
+        if (ok) saved = true;
+        else console.error('[Tree POST] UUID upsert failed:', userId);
+      }
+      // email: prefix bilan ham saqlash (boshqa qurilmadan login uchun)
+      if (email) {
+        const ok = await sbUpsert(`email:${email}`, state);
+        if (ok) saved = true;
+        else console.error('[Tree POST] email upsert failed:', email);
+      }
+
+      if (!saved) return send(500, { success: false, error: 'Supabase upsert muvaffaqiyatsiz' });
+      return send(200, { success: true });
     } catch (e: any) {
       console.error('[Tree POST]', e.message);
       return send(500, { success: false, error: e.message });
@@ -163,11 +168,8 @@ export default async function handler(req: any, res: any) {
     const userId = url.searchParams.get('userId');
     const email  = url.searchParams.get('email');
     try {
-      const keys = [
-        email  ? `email:${email}` : null,
-        userId ? userId           : null,
-      ].filter(Boolean) as string[];
-      for (const key of keys) await sbDelete(key);
+      if (userId) await sbDelete(userId);
+      if (email)  await sbDelete(`email:${email}`);
       return send(200, { success: true });
     } catch (e: any) {
       return send(500, { success: false, error: e.message });
