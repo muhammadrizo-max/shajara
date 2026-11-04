@@ -37,6 +37,7 @@ interface PersonCardProps {
   isHighlighted?: boolean;
   showLifeline?: boolean;
   onStartDrag?: (e: React.MouseEvent) => void;
+  onStartTouchDrag?: (e: React.TouchEvent) => void;
   isDraggable?: boolean;
 }
 
@@ -60,6 +61,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   isHighlighted = false,
   showLifeline = true,
   onStartDrag,
+  onStartTouchDrag,
   isDraggable = false,
 }) => {
   const isMe = person.id === meId;
@@ -107,52 +109,59 @@ export const PersonCard: React.FC<PersonCardProps> = ({
     }
   };
 
+  const handleCardMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea, [data-interactive="true"]')) {
+      return;
+    }
+    if (isDraggable && onStartDrag) {
+      onStartDrag(e);
+    }
+  };
+
+  const handleCardTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea, [data-interactive="true"]')) {
+      return;
+    }
+    if (isDraggable && onStartTouchDrag) {
+      onStartTouchDrag(e);
+    }
+  };
+
   return (
     <div
       id={`person-card-${person.id}`}
-      className={`relative w-64 rounded-2xl border transition-all duration-200 select-none shadow-sm hover:shadow-md ${getCardBorder()}`}
+      onMouseDown={handleCardMouseDown}
+      onTouchStart={handleCardTouchStart}
+      className={`relative w-64 rounded-2xl border transition-all duration-200 select-none shadow-sm hover:shadow-md ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''} ${getCardBorder()}`}
     >
       {/* 7 Ajdod / Ancestor Crown Badge */}
       {kinship.isDirectAncestor && person.id !== effectiveMeId && (
-        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500 text-white flex items-center gap-1 shadow-sm">
-          <Crown className="w-3 h-3 text-amber-100" />
+        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500 text-white flex items-center gap-1 shadow-sm pointer-events-none">
+          <Crown className="w-3.5 h-3.5 text-amber-100" />
           <span>{kinship.ancestorTitleUz || 'Ajdod'}</span>
         </div>
       )}
 
-      {/* "Siz (Men)" indicator badge (1-rasmdagi kabi) */}
+      {/* "Siz (Men)" indicator badge */}
       {isMe && (
-        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-600 text-white flex items-center gap-1 shadow-sm">
-          <Sparkles className="w-3 h-3 text-emerald-200" />
+        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-600 text-white flex items-center gap-1 shadow-sm pointer-events-none">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
           <span>Siz (Men)</span>
         </div>
       )}
 
       {/* Vaqtinchalik tanlangan nuqtai nazar badge */}
       {isTemporaryPerspective && !isMe && (
-        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-600 text-white flex items-center gap-1 shadow-sm">
-          <Compass className="w-3 h-3 text-amber-200" />
+        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-600 text-white flex items-center gap-1 shadow-sm pointer-events-none">
+          <Compass className="w-3.5 h-3.5 text-amber-200" />
           <span>Vaqtincha tanlangan</span>
         </div>
       )}
 
-      {/* Drag handle for owner repositioning */}
-      {isDraggable && onStartDrag && (
-        <div
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            onStartDrag(e);
-          }}
-          className="absolute -top-3 right-20 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white dark:bg-slate-800 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 shadow-xs cursor-move flex items-center gap-1 active:scale-95 transition select-none z-10"
-          title="Ushlab surish (kartochkalar orasidagi joyni ochish)"
-        >
-          <Move className="w-2.5 h-2.5" />
-          <span className="hidden sm:inline text-[8px]">Surish</span>
-        </div>
-      )}
-
       {/* Generation Tag */}
-      <div className="absolute -top-3 right-4 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+      <div className="absolute -top-3 right-4 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 pointer-events-none">
         {person.generation}-pusht
       </div>
 

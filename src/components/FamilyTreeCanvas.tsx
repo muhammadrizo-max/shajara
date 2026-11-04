@@ -57,7 +57,7 @@ const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const stateRef = useRef<{
-    stars: { x: number; y: number; r: number; alpha: number; speed: number }[];
+    stars: { x: number; y: number; r: number; alpha: number; speed: number; vx: number }[];
     clouds: { x: number; y: number; scale: number; speed: number; opacity: number }[];
     shooting: { x: number; y: number; len: number; speed: number; alpha: number }[];
     w: number; h: number;
@@ -74,9 +74,10 @@ const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       s.h = canvas!.height = canvas!.offsetHeight;
       const count = Math.floor((s.w * s.h) / 2500);
       s.stars = Array.from({ length: count }, () => ({
-        x: Math.random() * s.w, y: Math.random() * s.h * 0.8,
+        x: Math.random() * s.w, y: Math.random() * s.h * 0.85,
         r: Math.random() * 1.4 + 0.3, alpha: Math.random(),
         speed: Math.random() * 0.012 + 0.004,
+        vx: Math.random() * 0.12 + 0.04,
       }));
       s.clouds = Array.from({ length: 6 }, () => ({
         x: Math.random() * s.w, y: Math.random() * s.h * 0.4,
@@ -144,10 +145,18 @@ const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       ctx.fillRect(0, 0, s.w, s.h);
 
       if (dark) {
-        // Stars
+        // Stars drifting slowly across the night sky (like clouds do in daylight)
         for (const star of s.stars) {
           star.alpha += star.speed;
           if (star.alpha > 1 || star.alpha < 0.2) star.speed = -star.speed;
+
+          // Celestial drift
+          star.x += star.vx;
+          if (star.x > s.w + 10) {
+            star.x = -10;
+            star.y = Math.random() * s.h * 0.85;
+          }
+
           ctx.fillStyle = `rgba(255,255,255,${Math.max(0, star.alpha)})`;
           ctx.beginPath(); ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2); ctx.fill();
         }
@@ -214,6 +223,63 @@ const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface KinshipLine {
+  id: string;
+  pathD: string;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
+function generateStretchyKinshipPath(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  isBotanical: boolean,
+  cardRects: Array<{ id: string; left: number; right: number; top: number; bottom: number }>,
+  parentId: string,
+  childId: string
+): string {
+  const dy = endY - startY;
+
+  // Vertical direction: in botanical mode child is above parent (dy < 0), in classic child is below (dy > 0)
+  const isUpward = dy < 0;
+  const absDy = Math.abs(dy);
+  const curveDist = Math.max(35, absDy * 0.45);
+
+  let cy1 = startY + (isUpward ? -curveDist : curveDist);
+  let cy2 = endY - (isUpward ? -curveDist : curveDist);
+  let cx1 = startX;
+  let cx2 = endX;
+
+  // Obstacle avoidance: if any other card sits between start and end
+  const minY = Math.min(startY, endY);
+  const maxY = Math.max(startY, endY);
+  const midX = (startX + endX) / 2;
+
+  for (const rect of cardRects) {
+    if (rect.id === parentId || rect.id === childId) continue;
+    // Check if obstacle's vertical bounds intersect the span between parent and child
+    if (rect.bottom > minY + 15 && rect.top < maxY - 15) {
+      // Check if line passes horizontally through or near the obstacle card
+      const margin = 20;
+      if (midX >= rect.left - margin && midX <= rect.right + margin) {
+        // Curve around the obstacle gracefully!
+        const cardCenter = (rect.left + rect.right) / 2;
+        const deflectDirection = midX < cardCenter ? -1 : 1;
+        const deflectDist = 85;
+        cx1 += deflectDist * deflectDirection;
+        cx2 += deflectDist * deflectDirection;
+        break;
+      }
+    }
+  }
+
+  return `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${cx1.toFixed(1)} ${cy1.toFixed(1)}, ${cx2.toFixed(1)} ${cy2.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
+}
+
 export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   people,
   rootId,
@@ -236,12 +302,16 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   onOpenTelegramBotModal,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState<number>(0.85);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 100, y: 50 });
+  const treeContentRef = useRef<HTMLDivElement>(null);
+
+  // Default Zoom: 60% (0.60) — foydalanuvchi talabi bo'yicha aniq 60%
+  const [zoom, setZoom] = useState<number>(0.60);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 80, y: 50 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [showLifelines, setShowLifelines] = useState<boolean>(true);
+  const [kinshipLines, setKinshipLines] = useState<KinshipLine[]>([]);
 
   // Daraxt yo'nalishi: 'botanical' (ildizlar pastda, avlodlar tepaga qarab o'sadi) yoki 'classic' (ota-bobolar tepada)
   const [treeOrientation, setTreeOrientation] = useState<'botanical' | 'classic'>(() => {
@@ -253,7 +323,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     }
   });
 
-  // Daraxt egasi tomonidan surilgan kartochkalar koordinatalari (Desktop Drag)
+  // Daraxt egasi tomonidan surilgan kartochkalar koordinatalari (Desktop & Mobile Drag)
   const [cardOffsets, setCardOffsets] = useState<Record<string, { x: number; y: number }>>(() => {
     try {
       const saved = localStorage.getItem('shajarachi_card_offsets');
@@ -265,6 +335,17 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
   const isOwner = !currentUser || currentUser.role === 'owner' || currentUser.isGuest;
 
+  const getOffsetStyle = (id: string): React.CSSProperties => {
+    const off = cardOffsets[id];
+    if (!off) return {};
+    return {
+      transform: `translate(${off.x}px, ${off.y}px)`,
+      transition: 'transform 0.03s linear',
+      zIndex: 20,
+    };
+  };
+
+  // Desktop Mouse Drag on Card
   const handleStartDragCard = (personId: string, e: React.MouseEvent) => {
     if (!isOwner) return;
     e.preventDefault();
@@ -272,34 +353,90 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     const startX = e.clientX;
     const startY = e.clientY;
     const initialOffset = cardOffsets[personId] || { x: 0, y: 0 };
+    let hasMoved = false;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const dx = (moveEvent.clientX - startX) / zoom;
       const dy = (moveEvent.clientY - startY) / zoom;
-      setCardOffsets((prev) => {
-        const updated = {
-          ...prev,
-          [personId]: {
-            x: Math.round(initialOffset.x + dx),
-            y: Math.round(initialOffset.y + dy),
-          },
-        };
-        try {
-          localStorage.setItem('shajarachi_card_offsets', JSON.stringify(updated));
-        } catch {
-          // ignore storage errors
-        }
-        return updated;
-      });
+      if (Math.hypot(dx, dy) > 3) {
+        hasMoved = true;
+        setCardOffsets((prev) => {
+          const updated = {
+            ...prev,
+            [personId]: {
+              x: Math.round(initialOffset.x + dx),
+              y: Math.round(initialOffset.y + dy),
+            },
+          };
+          return updated;
+        });
+      }
     };
 
     const onMouseUp = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      if (!hasMoved) {
+        const p = people[personId];
+        if (p) onSelectPerson(p);
+      } else {
+        try {
+          localStorage.setItem('shajarachi_card_offsets', JSON.stringify(cardOffsets));
+        } catch {
+          // ignore
+        }
+      }
     };
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Mobile Touch Drag on Card
+  const handleStartTouchDragCard = (personId: string, e: React.TouchEvent) => {
+    if (!isOwner || e.touches.length !== 1) return;
+    e.stopPropagation();
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    const initialOffset = cardOffsets[personId] || { x: 0, y: 0 };
+    let hasMoved = false;
+
+    const onTouchMove = (moveEvent: TouchEvent) => {
+      if (moveEvent.touches.length !== 1) return;
+      const t = moveEvent.touches[0];
+      const dx = (t.clientX - startX) / zoom;
+      const dy = (t.clientY - startY) / zoom;
+      if (Math.hypot(dx, dy) > 4) {
+        hasMoved = true;
+        moveEvent.preventDefault();
+        setCardOffsets((prev) => ({
+          ...prev,
+          [personId]: {
+            x: Math.round(initialOffset.x + dx),
+            y: Math.round(initialOffset.y + dy),
+          },
+        }));
+      }
+    };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      if (!hasMoved) {
+        const p = people[personId];
+        if (p) onSelectPerson(p);
+      } else {
+        try {
+          localStorage.setItem('shajarachi_card_offsets', JSON.stringify(cardOffsets));
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
   };
 
   const handleResetOffsets = () => {
@@ -331,11 +468,11 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     lastTapTime: number;
   }>({
     initialDist: 0,
-    initialZoom: 0.85,
-    initialPan: { x: 100, y: 50 },
+    initialZoom: 0.60,
+    initialPan: { x: 80, y: 50 },
     initialMidpoint: { x: 0, y: 0 },
     isPinching: false,
-    touchStartPan: { x: 100, y: 50 },
+    touchStartPan: { x: 80, y: 50 },
     touchStartPos: { x: 0, y: 0 },
     lastTapTime: 0,
   });
@@ -582,7 +719,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       const rect = containerRef.current.getBoundingClientRect();
       const originX = rect.width / 2;
       const originY = rect.height / 2;
-      const defaultZoom = 0.85;
+      const defaultZoom = 0.60;
       
       setPan((prevPan) => {
         const scaleRatio = defaultZoom / zoom;
@@ -593,8 +730,8 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       });
       setZoom(defaultZoom);
     } else {
-      setZoom(0.85);
-      setPan({ x: 100, y: 50 });
+      setZoom(0.60);
+      setPan({ x: 80, y: 50 });
     }
   };
 
@@ -608,6 +745,127 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       (person.occupation && person.occupation.toLowerCase().includes(query))
     );
   };
+
+  // Active temporary perspective person
+  // Dinamik qarindoshlik chiziqlarini (SVG paths) kartochkalarning haqiqiy koordinatalari bo'yicha hisoblash
+  const updateKinshipLines = useCallback(() => {
+    const container = treeContentRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    if (containerRect.width === 0 || containerRect.height === 0) return;
+
+    const allPeople = Object.values(people) as Person[];
+    const lines: KinshipLine[] = [];
+    const isBotanical = treeOrientation === 'botanical';
+
+    // Barcha kartochkalarning bounding box'lari (to'siqlardan aylanib o'tish uchun)
+    const cardRects: Array<{ id: string; left: number; right: number; top: number; bottom: number }> = [];
+    allPeople.forEach((p) => {
+      const el = document.getElementById(`person-card-${p.id}`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        cardRects.push({
+          id: p.id,
+          left: (r.left - containerRect.left) / zoom,
+          right: (r.right - containerRect.left) / zoom,
+          top: (r.top - containerRect.top) / zoom,
+          bottom: (r.bottom - containerRect.top) / zoom,
+        });
+      }
+    });
+
+    const processedPairs = new Set<string>();
+
+    allPeople.forEach((person) => {
+      // Bolalarini topish
+      const children = allPeople.filter(
+        (c) => c.parentId === person.id || c.motherId === person.id
+      );
+      if (children.length === 0) return;
+
+      // Agar ota-ona shoxi yopilgan bo'lsa, chiziqlar chizilmaydi
+      if (collapsedIds.has(person.id)) return;
+
+      const personEl = document.getElementById(`person-card-${person.id}`);
+      if (!personEl) return;
+      const personRect = personEl.getBoundingClientRect();
+
+      // Turmush o'rtog'ini tekshirish
+      const spouseId = person.spouseId || allPeople.find((o) => o.spouseId === person.id)?.id;
+      const spouseEl = spouseId ? document.getElementById(`person-card-${spouseId}`) : null;
+
+      let startX: number;
+      let startY: number;
+
+      if (spouseEl) {
+        const spouseRect = spouseEl.getBoundingClientRect();
+        const pCenterX = (personRect.left + personRect.width / 2 - containerRect.left) / zoom;
+        const sCenterX = (spouseRect.left + spouseRect.width / 2 - containerRect.left) / zoom;
+        startX = (pCenterX + sCenterX) / 2;
+
+        if (isBotanical) {
+          const pTop = (personRect.top - containerRect.top) / zoom;
+          const sTop = (spouseRect.top - containerRect.top) / zoom;
+          startY = Math.min(pTop, sTop);
+        } else {
+          const pBottom = (personRect.bottom - containerRect.top) / zoom;
+          const sBottom = (spouseRect.bottom - containerRect.top) / zoom;
+          startY = Math.max(pBottom, sBottom);
+        }
+      } else {
+        startX = (personRect.left + personRect.width / 2 - containerRect.left) / zoom;
+        startY = (isBotanical ? personRect.top - containerRect.top : personRect.bottom - containerRect.top) / zoom;
+      }
+
+      children.forEach((child) => {
+        const pairKey = `${person.id}-${child.id}`;
+        if (processedPairs.has(pairKey)) return;
+        processedPairs.add(pairKey);
+
+        const childEl = document.getElementById(`person-card-${child.id}`);
+        if (!childEl) return;
+        const childRect = childEl.getBoundingClientRect();
+
+        const endX = (childRect.left + childRect.width / 2 - containerRect.left) / zoom;
+        const endY = (isBotanical ? childRect.bottom - containerRect.top : childRect.top - containerRect.top) / zoom;
+
+        const pathD = generateStretchyKinshipPath(
+          startX,
+          startY,
+          endX,
+          endY,
+          isBotanical,
+          cardRects,
+          person.id,
+          child.id
+        );
+
+        lines.push({
+          id: pairKey,
+          pathD,
+          startX,
+          startY,
+          endX,
+          endY,
+        });
+      });
+    });
+
+    setKinshipLines(lines);
+  }, [people, collapsedIds, treeOrientation, zoom]);
+
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => {
+      updateKinshipLines();
+    });
+    const timer = setTimeout(updateKinshipLines, 120);
+    window.addEventListener('resize', updateKinshipLines);
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateKinshipLines);
+    };
+  }, [updateKinshipLines, cardOffsets]);
 
   // Active temporary perspective person
   const activePerspectivePerson = activePerspectiveId ? people[activePerspectiveId] : null;
@@ -680,16 +938,8 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
     const isBotanical = treeOrientation === 'botanical';
 
-    const getOffsetStyle = (_id: string): React.CSSProperties => ({});
-
-    // Butun node offset — karta va undan chiqqan barcha chiziqlar birgalikda siljiydi
-    const nodeOffset = cardOffsets[person.id] || (spouse ? cardOffsets[spouse.id] : null) || null;
-    const nodeOffsetStyle: React.CSSProperties = nodeOffset
-      ? { transform: `translate(${nodeOffset.x}px, ${nodeOffset.y}px)`, transition: 'transform 0.05s linear', zIndex: nodeOffset ? 20 : undefined }
-      : {};
-
     return (
-      <div key={person.id} className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center relative`} style={nodeOffsetStyle}>
+      <div key={person.id} className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center relative`}>
         {/* Node Card / Couple Unit */}
         <div className="z-10 interactive-control flex items-center justify-center relative">
           {spouse && rightPerson ? (
@@ -717,6 +967,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   isHighlighted={isMatch(leftPerson)}
                   isDraggable={isOwner}
                   onStartDrag={(e) => handleStartDragCard(leftPerson.id, e)}
+                  onStartTouchDrag={(e) => handleStartTouchDragCard(leftPerson.id, e)}
                 />
               </div>
 
@@ -755,6 +1006,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                   isHighlighted={isMatch(rightPerson)}
                   isDraggable={isOwner}
                   onStartDrag={(e) => handleStartDragCard(rightPerson.id, e)}
+                  onStartTouchDrag={(e) => handleStartTouchDragCard(rightPerson.id, e)}
                 />
               </div>
             </div>
@@ -781,97 +1033,22 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 isHighlighted={isMatch(person)}
                 isDraggable={isOwner}
                 onStartDrag={(e) => handleStartDragCard(person.id, e)}
+                onStartTouchDrag={(e) => handleStartTouchDragCard(person.id, e)}
               />
             </div>
           )}
         </div>
 
-        {/* Children Branch */}
+        {/* Children Branch (Stretchy SVG lines automatically connect from parent/couple center to each child) */}
         {hasChildren && isExpanded && (
-          <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-6 sm:mb-8' : 'mt-6 sm:mt-8'} relative w-full`}>
-            {/* Vertical connector stem from parent/couple center to junction line */}
-            <div
-              className={`w-0.5 h-4 sm:h-5 ${
-                isBotanical
-                  ? 'bg-gradient-to-t from-emerald-500 via-teal-500 to-emerald-600'
-                  : 'bg-gradient-to-b from-emerald-500 via-teal-500 to-emerald-600'
-              } rounded-full`}
-            />
-
-            {/* Branch: barcha bolalar bitta gorizontal qatorda */}
-            <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center relative`}>
-              {children.map((child, idx) => {
-                const isOnlyChild = children.length === 1;
-                const isFirst = idx === 0;
-                const isLast = idx === children.length - 1;
-
-                return (
-                  <div key={child.id} className="flex flex-col items-center relative px-0.5">
-                    {/* Top Curved Connector for Classical (Top-Down) Mode */}
-                    {!isBotanical && !isOnlyChild && (
-                      <div className="w-full h-4 relative pointer-events-none">
-                        {isFirst && (
-                          <div
-                            className="absolute top-0 right-0 h-4 border-t-2 border-l-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-tl-xl"
-                            style={{ left: '50%' }}
-                          />
-                        )}
-                        {isLast && (
-                          <div
-                            className="absolute top-0 left-0 h-4 border-t-2 border-r-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-tr-xl"
-                            style={{ right: '50%' }}
-                          />
-                        )}
-                        {!isFirst && !isLast && (
-                          <>
-                            <div className="absolute top-0 left-0 right-0 border-t-2 border-emerald-500/85 dark:border-emerald-400/85" />
-                            <div className="w-0.5 h-4 bg-emerald-500/85 dark:bg-emerald-400/85 absolute top-0 left-1/2 -translate-x-1/2 rounded-full" />
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Single Child Direct Stem Connector for Classical Mode */}
-                    {!isBotanical && isOnlyChild && (
-                      <div className="w-0.5 h-3 bg-emerald-500/85 dark:bg-emerald-400/85 rounded-full pointer-events-none" />
-                    )}
-
-                    {/* Subtree for this child */}
-                    <div className={isBotanical ? (isOnlyChild ? 'pb-1' : 'pb-0') : (isOnlyChild ? 'pt-1' : 'pt-0')}>
-                      {renderTreeNode(child.id, level + 1)}
-                    </div>
-
-                    {/* Single Child Direct Stem Connector for Botanical Mode */}
-                    {isBotanical && isOnlyChild && (
-                      <div className="w-0.5 h-3 bg-emerald-500/85 dark:bg-emerald-400/85 rounded-full pointer-events-none" />
-                    )}
-
-                    {/* Bottom Curved Connector for Botanical (Bottom-Up) Mode */}
-                    {isBotanical && !isOnlyChild && (
-                      <div className="w-full h-4 relative pointer-events-none">
-                        {isFirst && (
-                          <div
-                            className="absolute bottom-0 right-0 h-4 border-b-2 border-l-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-bl-xl"
-                            style={{ left: '50%' }}
-                          />
-                        )}
-                        {isLast && (
-                          <div
-                            className="absolute bottom-0 left-0 h-4 border-b-2 border-r-2 border-emerald-500/85 dark:border-emerald-400/85 rounded-br-xl"
-                            style={{ right: '50%' }}
-                          />
-                        )}
-                        {!isFirst && !isLast && (
-                          <>
-                            <div className="absolute bottom-0 left-0 right-0 border-b-2 border-emerald-500/85 dark:border-emerald-400/85" />
-                            <div className="w-0.5 h-4 bg-emerald-500/85 dark:bg-emerald-400/85 absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full" />
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-12 sm:mb-14' : 'mt-12 sm:mt-14'} relative w-full`}>
+            {/* All children placed side by side with consistent spacing */}
+            <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center gap-6 sm:gap-10 relative`}>
+              {children.map((child) => (
+                <div key={child.id} className="flex flex-col items-center relative">
+                  {renderTreeNode(child.id, level + 1)}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1052,7 +1229,54 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
-        <div className="inline-block p-8 sm:p-12 min-w-max">
+        <div 
+          id="tree-canvas-content" 
+          ref={treeContentRef} 
+          className="inline-block p-8 sm:p-14 min-w-max relative"
+        >
+          {/* Dynamic Kinship SVG Lines Layer (Stretchy elastic curves anchored directly to cards) */}
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
+            style={{ zIndex: 2 }}
+          >
+            <defs>
+              <linearGradient id="kinship-line-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.95" />
+                <stop offset="50%" stopColor="#14b8a6" stopOpacity="0.95" />
+                <stop offset="100%" stopColor="#059669" stopOpacity="0.95" />
+              </linearGradient>
+              <filter id="kinship-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation="2.5" floodColor="#10b981" floodOpacity="0.4" />
+              </filter>
+            </defs>
+
+            {kinshipLines.map((line) => (
+              <g key={line.id}>
+                {/* Contrast under-line */}
+                <path
+                  d={line.pathD}
+                  fill="none"
+                  stroke="rgba(0, 0, 0, 0.12)"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                />
+                {/* Primary elastic kinship line */}
+                <path
+                  d={line.pathD}
+                  fill="none"
+                  stroke="url(#kinship-line-grad)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  filter="url(#kinship-glow)"
+                />
+                {/* Parent connection pin */}
+                <circle cx={line.startX} cy={line.startY} r="3.5" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+                {/* Child connection pin */}
+                <circle cx={line.endX} cy={line.endY} r="3.5" fill="#059669" stroke="#ffffff" strokeWidth="1.5" />
+              </g>
+            ))}
+          </svg>
+
           {isLoading && Object.keys(people).length === 0 ? (
             /* Tree Loading Skeleton */
             <div className="flex flex-col items-center justify-center p-6 sm:p-12 space-y-6 animate-in fade-in duration-300">

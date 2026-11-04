@@ -21,7 +21,8 @@ import {
   Info,
   Sparkles,
   Printer,
-  BookOpen
+  BookOpen,
+  X
 } from 'lucide-react';
 import { ThemeMode } from '../utils/theme';
 import { PolicyType } from './LegalPolicyModal';
@@ -45,6 +46,8 @@ interface NavbarProps {
   onRequestLogout: () => void;
   onOpenLoginModal: () => void;
   onOpenPolicy?: (type: PolicyType) => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (query: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -66,19 +69,32 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRequestLogout,
   onOpenLoginModal,
   onOpenPolicy,
+  searchQuery = '',
+  onSearchQueryChange,
 }) => {
   const importFileRef = useRef<HTMLInputElement>(null);
   const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isHoveredSearch, setIsHoveredSearch] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const me = people[meId];
   const peopleList = Object.values(people);
 
-  // Close dropdown on click/touch outside
+  // Close search or dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsToolsDropdownOpen(false);
+      }
+      if (
+        searchContainerRef.current && 
+        !searchContainerRef.current.contains(e.target as Node) &&
+        !searchQuery
+      ) {
+        setIsSearchExpanded(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -87,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, []);
+  }, [searchQuery]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -188,9 +204,103 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Right: Tools Dropdown, User Profile (Opens Right Sidebar), and Logout Icon */}
+          {/* Right: Expandable Search, Direct Theme Toggle, Tools Dropdown, User Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             
+            {/* Expandable Search Input (Slides out to the left) */}
+            <div
+              ref={searchContainerRef}
+              onMouseEnter={() => setIsHoveredSearch(true)}
+              onMouseLeave={() => {
+                if (!searchQuery && document.activeElement !== searchInputRef.current) {
+                  setIsHoveredSearch(false);
+                }
+              }}
+              className={`relative flex items-center transition-all duration-300 ease-out ${
+                isSearchExpanded || isHoveredSearch || Boolean(searchQuery)
+                  ? 'w-44 xs:w-52 sm:w-64 md:w-72'
+                  : 'w-10'
+              }`}
+            >
+              {/* Expandable background container */}
+              <div
+                className={`flex items-center w-full h-10 rounded-xl transition-all duration-300 ease-out border ${
+                  isSearchExpanded || isHoveredSearch || Boolean(searchQuery)
+                    ? 'bg-white dark:bg-slate-900 border-emerald-400/80 dark:border-emerald-600 shadow-sm pl-9 pr-2'
+                    : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <input
+                  ref={searchInputRef}
+                  id="navbar-search-input"
+                  type="text"
+                  placeholder="Shajaradan qidirish..."
+                  value={searchQuery}
+                  onChange={(e) => onSearchQueryChange?.(e.target.value)}
+                  onFocus={() => setIsSearchExpanded(true)}
+                  onBlur={() => {
+                    if (!searchQuery) {
+                      setIsSearchExpanded(false);
+                      setIsHoveredSearch(false);
+                    }
+                  }}
+                  className={`w-full bg-transparent text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-opacity duration-200 ${
+                    isSearchExpanded || isHoveredSearch || Boolean(searchQuery)
+                      ? 'opacity-100 pointer-events-auto'
+                      : 'opacity-0 pointer-events-none'
+                  }`}
+                />
+
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSearchQueryChange?.('');
+                      searchInputRef.current?.focus();
+                    }}
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 cursor-pointer"
+                    title="Tozalash"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Lupa button icon (Fixed at left edge of the search container) */}
+              <button
+                id="btn-nav-search-icon"
+                type="button"
+                onClick={() => {
+                  setIsSearchExpanded((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setTimeout(() => searchInputRef.current?.focus(), 60);
+                    }
+                    return next;
+                  });
+                }}
+                className="absolute left-0 top-0 bottom-0 w-10 flex items-center justify-center rounded-xl text-slate-700 dark:text-slate-200 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                title="Qidirish (Lupa)"
+              >
+                <Search className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </button>
+            </div>
+
+            {/* Direct Theme Toggle Button (1-Click Dark / Light Mode) */}
+            <button
+              id="btn-nav-theme-toggle"
+              type="button"
+              onClick={onToggleTheme}
+              className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700 shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0"
+              title={theme === 'dark' ? "Kunduzgi rejimga o'tish (Light mode ☀️)" : "Tungi rejimga o'tish (Dark mode 🌙)"}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400 animate-in spin-in-90 duration-300" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-700 dark:text-slate-200 animate-in -spin-in-90 duration-300" />
+              )}
+            </button>
+
             {/* Compact Tools / Settings Dropdown (Click & Touch Toggle) */}
             <div 
               ref={dropdownRef}
@@ -203,7 +313,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   e.stopPropagation();
                   setIsToolsDropdownOpen((prev) => !prev);
                 }}
-                className={`p-2 rounded-xl text-slate-700 dark:text-slate-200 border transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                className={`p-2.5 rounded-xl text-slate-700 dark:text-slate-200 border transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
                   isToolsDropdownOpen 
                     ? 'bg-emerald-50 border-emerald-400 dark:bg-emerald-950/70 dark:border-emerald-600 text-emerald-600 shadow-xs'
                     : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -222,26 +332,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 space-y-1 text-xs">
                     
-                    {/* Theme Toggle */}
-                    <button
-                      onClick={() => {
-                        onToggleTheme();
-                      }}
-                      className="w-full px-2.5 py-2 rounded-xl flex items-center justify-between text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        {theme === 'dark' ? (
-                          <Sun className="w-4 h-4 text-amber-400" />
-                        ) : (
-                          <Moon className="w-4 h-4 text-slate-700" />
-                        )}
-                        <span>Mavzu ko'rinishi</span>
-                      </div>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                        {theme === 'dark' ? 'Dark' : 'Light'}
-                      </span>
-                    </button>
-
                     {/* Menga kim bo'ladi? */}
                     <button
                       onClick={() => {

@@ -800,6 +800,8 @@ export default function App() {
           onRequestLogout={() => setIsLogoutConfirmOpen(true)}
           onOpenLoginModal={() => setIsLoginModalOpen(true)}
           onOpenPolicy={handleOpenPolicy}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
         />
       )}
 
@@ -814,34 +816,6 @@ export default function App() {
         {/* Tree View */}
         {viewMode === 'tree' && (
           <div className="relative w-full h-full min-h-0 flex-1 overflow-hidden">
-            {/* Floating Search Bar on Canvas — moves when left sidebar opens */}
-            <div 
-              className={`absolute top-3.5 z-20 transition-all duration-300 pointer-events-auto ${
-                isLeftSidebarOpen ? 'left-[21rem] sm:left-[23rem]' : 'left-3 sm:left-4'
-              } w-60 sm:w-72`}
-            >
-              <div className="relative flex items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-md">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                <input
-                  id="search-tree-floating-input"
-                  type="text"
-                  placeholder="Shajaradan qidirish..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 rounded-2xl bg-transparent text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full"
-                    title="Tozalash"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* Tree Canvas */}
             <FamilyTreeCanvas
               people={state.people}
