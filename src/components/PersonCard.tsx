@@ -134,7 +134,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
       id={`person-card-${person.id}`}
       onMouseDown={handleCardMouseDown}
       onTouchStart={handleCardTouchStart}
-      className={`relative w-64 rounded-2xl border transition-all duration-200 select-none shadow-sm hover:shadow-md ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''} ${getCardBorder()}`}
+      className={`relative w-56 sm:w-60 rounded-2xl border transition-all duration-200 select-none shadow-sm hover:shadow-md ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''} ${getCardBorder()}`}
     >
       {/* 7 Ajdod / Ancestor Crown Badge */}
       {kinship.isDirectAncestor && person.id !== effectiveMeId && (

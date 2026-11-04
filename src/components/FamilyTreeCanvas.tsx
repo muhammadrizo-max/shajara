@@ -223,13 +223,28 @@ const SkyCanvas: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface CardBox {
+  id: string;
+  cx: number;
+  cy: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
 interface KinshipLine {
   id: string;
+  type: 'parent-child' | 'couple';
   pathD: string;
   startX: number;
   startY: number;
   endX: number;
   endY: number;
+  midX?: number;
+  midY?: number;
 }
 
 function generateStretchyKinshipPath(
@@ -317,9 +332,9 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   const [treeOrientation, setTreeOrientation] = useState<'botanical' | 'classic'>(() => {
     try {
       const saved = localStorage.getItem('shajarachi_tree_orientation');
-      return (saved === 'classic' || saved === 'botanical') ? saved : 'botanical';
+      return (saved === 'classic' || saved === 'botanical') ? saved : 'classic';
     } catch {
-      return 'botanical';
+      return 'classic';
     }
   });
 
@@ -333,6 +348,9 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     }
   });
 
+  // Kesh qilingan kartochkalar boshlang'ich o'lchamlari (Zoom va Drag paytida 120 FPS ta'minlash uchun)
+  const cardBasePositionsRef = useRef<Record<string, CardBox>>({});
+
   const isOwner = !currentUser || currentUser.role === 'owner' || currentUser.isGuest;
 
   const getOffsetStyle = (id: string): React.CSSProperties => {
@@ -340,7 +358,6 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     if (!off) return {};
     return {
       transform: `translate(${off.x}px, ${off.y}px)`,
-      transition: 'transform 0.03s linear',
       zIndex: 20,
     };
   };
@@ -747,13 +764,56 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   };
 
   // Active temporary perspective person
-  // Dinamik qarindoshlik chiziqlarini (SVG paths) kartochkalarning haqiqiy koordinatalari bo'yicha hisoblash
-  const updateKinshipLines = useCallback(() => {
-    const container = treeContentRef.current;
-    if (!container) return;
-    const containerRect = container.getBoundingClientRect();
-    if (containerRect.width === 0 || containerRect.height === 0) return;
+  // Helper to get card bounding box (cached unscaled base + current dragging offset)
+  const getCardBox = useCallback((id: string, offsets: Record<string, { x: number; y: number }>): CardBox | null => {
+    const base = cardBasePositionsRef.current[id];
+    if (base) {
+      const off = offsets[id] || { x: 0, y: 0 };
+      const left = base.left + off.x;
+      const top = base.top + off.y;
+      return {
+        id,
+        left,
+        right: left + base.width,
+        top,
+        bottom: top + base.height,
+        cx: left + base.width / 2,
+        cy: top + base.height / 2,
+        width: base.width,
+        height: base.height,
+      };
+    }
 
+    // Fallback: If not yet measured, query DOM once
+    const el = document.getElementById(`person-card-${id}`);
+    const container = treeContentRef.current;
+    if (el && container) {
+      const r = el.getBoundingClientRect();
+      const cRect = container.getBoundingClientRect();
+      if (cRect.width > 0 && zoom > 0) {
+        const off = offsets[id] || { x: 0, y: 0 };
+        const left = (r.left - cRect.left) / zoom;
+        const top = (r.top - cRect.top) / zoom;
+        const width = r.width / zoom;
+        const height = r.height / zoom;
+        return {
+          id,
+          left,
+          right: left + width,
+          top,
+          bottom: top + height,
+          cx: left + width / 2,
+          cy: top + height / 2,
+          width,
+          height,
+        };
+      }
+    }
+    return null;
+  }, [zoom]);
+
+  // Purely mathematical recalculation of kinship lines (runs in ~0.05ms, ZERO DOM queries during drag/zoom)
+  const recalculateLines = useCallback((offsets: Record<string, { x: number; y: number }>) => {
     const allPeople = Object.values(people) as Person[];
     const lines: KinshipLine[] = [];
     const isBotanical = treeOrientation === 'botanical';
@@ -761,87 +821,130 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     // Barcha kartochkalarning bounding box'lari (to'siqlardan aylanib o'tish uchun)
     const cardRects: Array<{ id: string; left: number; right: number; top: number; bottom: number }> = [];
     allPeople.forEach((p) => {
-      const el = document.getElementById(`person-card-${p.id}`);
-      if (el) {
-        const r = el.getBoundingClientRect();
-        cardRects.push({
-          id: p.id,
-          left: (r.left - containerRect.left) / zoom,
-          right: (r.right - containerRect.left) / zoom,
-          top: (r.top - containerRect.top) / zoom,
-          bottom: (r.bottom - containerRect.top) / zoom,
-        });
-      }
+      const box = getCardBox(p.id, offsets);
+      if (box) cardRects.push(box);
     });
 
     const processedPairs = new Set<string>();
+    const processedCouples = new Set<string>();
 
     allPeople.forEach((person) => {
+      const pBox = getCardBox(person.id, offsets);
+      if (!pBox) return;
+
+      // Turmush o'rtog'ini tekshirish
+      const spouseId = person.spouseId || allPeople.find((o) => o.spouseId === person.id)?.id;
+      const sBox = spouseId ? getCardBox(spouseId, offsets) : null;
+
+      // Agar er-xotindan biri surilgan bo'lsa, o'rtalaridagi elastik rishtani SVG da ko'rsatish
+      if (spouseId && sBox) {
+        const coupleKey = [person.id, spouseId].sort().join('--');
+        if (!processedCouples.has(coupleKey)) {
+          processedCouples.add(coupleKey);
+          const hasOffset = Boolean(
+            (offsets[person.id]?.x || offsets[person.id]?.y) ||
+            (offsets[spouseId]?.x || offsets[spouseId]?.y)
+          );
+          if (hasOffset) {
+            const isPLeft = pBox.cx < sBox.cx;
+            const leftB = isPLeft ? pBox : sBox;
+            const rightB = isPLeft ? sBox : pBox;
+            const sX = leftB.right;
+            const sY = leftB.cy;
+            const eX = rightB.left;
+            const eY = rightB.cy;
+            const mX = (sX + eX) / 2;
+            const mY = (sY + eY) / 2;
+            lines.push({
+              id: `couple-${coupleKey}`,
+              type: 'couple',
+              pathD: `M ${sX.toFixed(1)} ${sY.toFixed(1)} Q ${mX.toFixed(1)} ${mY.toFixed(1)}, ${eX.toFixed(1)} ${eY.toFixed(1)}`,
+              startX: sX,
+              startY: sY,
+              endX: eX,
+              endY: eY,
+              midX: mX,
+              midY: mY,
+            });
+          }
+        }
+      }
+
       // Bolalarini topish
       const children = allPeople.filter(
-        (c) => c.parentId === person.id || c.motherId === person.id
+        (c) => c.parentId === person.id || c.motherId === person.id || (spouseId && (c.parentId === spouseId || c.motherId === spouseId))
       );
       if (children.length === 0) return;
 
       // Agar ota-ona shoxi yopilgan bo'lsa, chiziqlar chizilmaydi
-      if (collapsedIds.has(person.id)) return;
-
-      const personEl = document.getElementById(`person-card-${person.id}`);
-      if (!personEl) return;
-      const personRect = personEl.getBoundingClientRect();
-
-      // Turmush o'rtog'ini tekshirish
-      const spouseId = person.spouseId || allPeople.find((o) => o.spouseId === person.id)?.id;
-      const spouseEl = spouseId ? document.getElementById(`person-card-${spouseId}`) : null;
+      if (collapsedIds.has(person.id) || (spouseId && collapsedIds.has(spouseId))) return;
 
       let startX: number;
       let startY: number;
 
-      if (spouseEl) {
-        const spouseRect = spouseEl.getBoundingClientRect();
-        const pCenterX = (personRect.left + personRect.width / 2 - containerRect.left) / zoom;
-        const sCenterX = (spouseRect.left + spouseRect.width / 2 - containerRect.left) / zoom;
-        startX = (pCenterX + sCenterX) / 2;
-
-        if (isBotanical) {
-          const pTop = (personRect.top - containerRect.top) / zoom;
-          const sTop = (spouseRect.top - containerRect.top) / zoom;
-          startY = Math.min(pTop, sTop);
-        } else {
-          const pBottom = (personRect.bottom - containerRect.top) / zoom;
-          const sBottom = (spouseRect.bottom - containerRect.top) / zoom;
-          startY = Math.max(pBottom, sBottom);
-        }
+      if (sBox) {
+        startX = (pBox.cx + sBox.cx) / 2;
+        startY = isBotanical ? Math.min(pBox.top, sBox.top) : Math.max(pBox.bottom, sBox.bottom);
       } else {
-        startX = (personRect.left + personRect.width / 2 - containerRect.left) / zoom;
-        startY = (isBotanical ? personRect.top - containerRect.top : personRect.bottom - containerRect.top) / zoom;
+        startX = pBox.cx;
+        startY = isBotanical ? pBox.top : pBox.bottom;
       }
 
-      children.forEach((child) => {
+      // Bolalarning qutilarini olish
+      const childBoxes = children.map((c) => ({ person: c, box: getCardBox(c.id, offsets) }));
+      const validChildBoxes = childBoxes.filter((cb): cb is { person: Person; box: CardBox } => cb.box !== null);
+
+      validChildBoxes.forEach(({ person: child, box: cBox }) => {
         const pairKey = `${person.id}-${child.id}`;
         if (processedPairs.has(pairKey)) return;
         processedPairs.add(pairKey);
 
-        const childEl = document.getElementById(`person-card-${child.id}`);
-        if (!childEl) return;
-        const childRect = childEl.getBoundingClientRect();
-
-        const endX = (childRect.left + childRect.width / 2 - containerRect.left) / zoom;
-        const endY = (isBotanical ? childRect.bottom - containerRect.top : childRect.top - containerRect.top) / zoom;
-
-        const pathD = generateStretchyKinshipPath(
-          startX,
-          startY,
-          endX,
-          endY,
-          isBotanical,
-          cardRects,
-          person.id,
-          child.id
+        // Bolalar ustma-ust taxlanganligini aniqlash (bir xil X ustunida turgan aka-uka/opa-singillar)
+        const siblingsWithSameX = validChildBoxes.filter(
+          (other) => other.person.id !== child.id && Math.abs(other.box.cx - cBox.cx) < 25
         );
+        const isVerticallyStacked = siblingsWithSameX.length > 0;
+
+        let endX: number;
+        let endY: number;
+        let pathD: string;
+
+        if (isVerticallyStacked) {
+          // Ota-onaga eng yaqin turgan birinchi bola: to'g'ridan-to'g'ri bog'lanadi
+          const isClosestToParent = isBotanical
+            ? validChildBoxes.every((other) => other.box.cy <= cBox.cy)
+            : validChildBoxes.every((other) => other.box.cy >= cBox.cy);
+
+          if (isClosestToParent) {
+            endX = cBox.cx;
+            endY = isBotanical ? cBox.bottom : cBox.top;
+            pathD = generateStretchyKinshipPath(startX, startY, endX, endY, isBotanical, cardRects, person.id, child.id);
+          } else {
+            // 4-rasm arxitekturasi: Ustma-ust kartochkalar uchun yon tarafdan kiruvchi silliq tarmoq chiziqlari
+            if (startX >= cBox.cx - 10) {
+              // Ota-ona yoki asosiy tanasi o'ngda: kartochkaning o'ng qirrasiga kiradi
+              endX = cBox.right;
+              endY = cBox.cy;
+              const trunkX = Math.max(cBox.right + 25, Math.min(startX, cBox.right + 70));
+              pathD = `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${trunkX.toFixed(1)} ${(startY + (endY - startY) * 0.35).toFixed(1)}, ${trunkX.toFixed(1)} ${endY.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
+            } else {
+              // Ota-ona yoki asosiy tanasi chapda: kartochkaning chap qirrasiga kiradi
+              endX = cBox.left;
+              endY = cBox.cy;
+              const trunkX = Math.min(cBox.left - 25, Math.max(startX, cBox.left - 70));
+              pathD = `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${trunkX.toFixed(1)} ${(startY + (endY - startY) * 0.35).toFixed(1)}, ${trunkX.toFixed(1)} ${endY.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
+            }
+          }
+        } else {
+          // Oddiy gorizontal shajaraviy bola
+          endX = cBox.cx;
+          endY = isBotanical ? cBox.bottom : cBox.top;
+          pathD = generateStretchyKinshipPath(startX, startY, endX, endY, isBotanical, cardRects, person.id, child.id);
+        }
 
         lines.push({
           id: pairKey,
+          type: 'parent-child',
           pathD,
           startX,
           startY,
@@ -852,20 +955,66 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     });
 
     setKinshipLines(lines);
-  }, [people, collapsedIds, treeOrientation, zoom]);
+  }, [people, collapsedIds, treeOrientation, getCardBox]);
 
+  // Faqat daraxt tuzilishi o'zgarganda DOM o'lchovlarini keshga olish
+  const measureBasePositions = useCallback(() => {
+    const container = treeContentRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    if (containerRect.width === 0 || containerRect.height === 0) return;
+
+    const allPeople = Object.values(people) as Person[];
+    const newPositions: Record<string, CardBox> = {};
+
+    allPeople.forEach((p) => {
+      const el = document.getElementById(`person-card-${p.id}`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        const off = cardOffsets[p.id] || { x: 0, y: 0 };
+        const left = (r.left - containerRect.left) / zoom - off.x;
+        const top = (r.top - containerRect.top) / zoom - off.y;
+        const width = r.width / zoom;
+        const height = r.height / zoom;
+        newPositions[p.id] = {
+          id: p.id,
+          left,
+          right: left + width,
+          top,
+          bottom: top + height,
+          cx: left + width / 2,
+          cy: top + height / 2,
+          width,
+          height,
+        };
+      }
+    });
+
+    cardBasePositionsRef.current = newPositions;
+    recalculateLines(cardOffsets);
+  }, [people, zoom, cardOffsets, recalculateLines]);
+
+  // Daraxt tuzilishi, shoxlar yoki ekran o'lchami o'zgarganda bir marta o'lchash
   useEffect(() => {
     const frameId = requestAnimationFrame(() => {
-      updateKinshipLines();
+      measureBasePositions();
     });
-    const timer = setTimeout(updateKinshipLines, 120);
-    window.addEventListener('resize', updateKinshipLines);
+    const timer = setTimeout(measureBasePositions, 120);
+    const onResize = () => {
+      measureBasePositions();
+    };
+    window.addEventListener('resize', onResize);
     return () => {
       cancelAnimationFrame(frameId);
       clearTimeout(timer);
-      window.removeEventListener('resize', updateKinshipLines);
+      window.removeEventListener('resize', onResize);
     };
-  }, [updateKinshipLines, cardOffsets]);
+  }, [people, collapsedIds, treeOrientation, measureBasePositions]);
+
+  // Kartochkalar surilganda: faqat sof matematik hisob-kitob (DOM o'qilmaydi, 120 FPS)
+  useEffect(() => {
+    recalculateLines(cardOffsets);
+  }, [cardOffsets, recalculateLines]);
 
   // Active temporary perspective person
   const activePerspectivePerson = activePerspectiveId ? people[activePerspectiveId] : null;
@@ -925,16 +1074,26 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
     const hasChildren = children.length > 0;
     const isExpanded = !collapsedIds.has(person.id) && (!spouse || !collapsedIds.has(spouse.id));
 
-    // Detect if this is a single parent (e.g. Bobo) with exactly one child that is married (e.g. Muxiddin + Gulchehraxon)
-    const singleChild = children.length === 1 ? children[0] : null;
-    const singleChildSpouseId = singleChild 
-      ? (singleChild.spouseId || allPeopleList.find((o) => o.spouseId === singleChild.id)?.id)
-      : null;
-    const singleChildSpouse = singleChildSpouseId ? people[singleChildSpouseId] : null;
-    const isSingleChildWithSpouse = !spouse && Boolean(singleChildSpouse);
-    const isSingleChildLeftInCouple = singleChild 
-      ? (singleChild.gender === 'male' || (singleChild.parentId && !singleChildSpouse?.parentId))
-      : true;
+    // Bolalarni tahlil qilish: avlodlari yoki turmush o'rtog'i bo'lganlar (shoxchalar) va bo'lmaganlar (barglar)
+    const hasDescendantsOrSpouse = (c: Person) => {
+      const kids = getChildren(c.id, people);
+      const spId = c.spouseId || allPeopleList.find((o) => o.spouseId === c.id)?.id;
+      return kids.length > 0 || Boolean(spId);
+    };
+
+    const branchChildren = children.filter(hasDescendantsOrSpouse);
+    const leafChildren = children.filter((c) => !hasDescendantsOrSpouse(c));
+
+    // Barg bolalarni tartiblash: Men birinchi, so'ng tug'ilgan yili/ismi bo'yicha
+    leafChildren.sort((a, b) => {
+      if (a.id === meId) return -1;
+      if (b.id === meId) return 1;
+      if (a.birthYear && b.birthYear) return a.birthYear.localeCompare(b.birthYear);
+      return a.name.localeCompare(b.name);
+    });
+
+    // Barcha aka-uka/opa-singillar barg bo'lsa (Screenshot 4 talabi: Muhammadrizo, Xurshidabonu, Halimaxon, Shahzodaxon)
+    const allLeafChildren = children.length > 1 && branchChildren.length === 0;
 
     const isBotanical = treeOrientation === 'botanical';
 
@@ -945,7 +1104,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
           {spouse && rightPerson ? (
             <div className="flex items-center justify-center gap-2 sm:gap-3 relative">
               {/* Left Card */}
-              <div className="relative transition-transform duration-75" style={getOffsetStyle(leftPerson.id)}>
+              <div className="relative" style={getOffsetStyle(leftPerson.id)}>
                 <PersonCard
                   person={leftPerson}
                   people={people}
@@ -972,7 +1131,12 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               </div>
 
               {/* Horizontal Bridge Line with Couple Heart Badge (O'rtasidan tortilgan rishta) */}
-              <div className="flex items-center justify-center shrink-0 relative px-1 sm:px-2 z-10">
+              <div 
+                className="flex items-center justify-center shrink-0 relative px-1 sm:px-2 z-10 transition-opacity"
+                style={{
+                  opacity: (cardOffsets[leftPerson.id]?.x || cardOffsets[rightPerson.id]?.x) ? 0.35 : 1
+                }}
+              >
                 <div className="w-5 sm:w-8 h-1 bg-gradient-to-r from-emerald-500 via-rose-400 to-rose-500 rounded-full shadow-xs" />
                 <div
                   className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white dark:bg-slate-800 border-2 border-rose-400 dark:border-rose-500 flex items-center justify-center text-rose-500 shadow-md z-10 mx-0.5"
@@ -984,7 +1148,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               </div>
 
               {/* Right Card */}
-              <div className="relative transition-transform duration-75" style={getOffsetStyle(rightPerson.id)}>
+              <div className="relative" style={getOffsetStyle(rightPerson.id)}>
                 <PersonCard
                   person={rightPerson}
                   people={people}
@@ -1011,7 +1175,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
               </div>
             </div>
           ) : (
-            <div className="relative transition-transform duration-75" style={getOffsetStyle(person.id)}>
+            <div className="relative" style={getOffsetStyle(person.id)}>
               <PersonCard
                 person={person}
                 people={people}
@@ -1039,17 +1203,44 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
           )}
         </div>
 
-        {/* Children Branch (Stretchy SVG lines automatically connect from parent/couple center to each child) */}
+        {/* Children Branch (Bo'yi kengaytirilgan va eni qisqartirilgan mutanosib shajara) */}
         {hasChildren && isExpanded && (
-          <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-12 sm:mb-14' : 'mt-12 sm:mt-14'} relative w-full`}>
-            {/* All children placed side by side with consistent spacing */}
-            <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center gap-6 sm:gap-10 relative`}>
-              {children.map((child) => (
-                <div key={child.id} className="flex flex-col items-center relative">
-                  {renderTreeNode(child.id, level + 1)}
+          <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-20 sm:mb-24' : 'mt-20 sm:mt-24'} relative w-full`}>
+            {allLeafChildren ? (
+              /* Foydalanuvchi talabi (Screenshot 4): Avlodi yo'q farzandlar bitta ustunda USTMA-UST turadi */
+              <div className="flex flex-col items-center gap-4 sm:gap-5 relative">
+                {leafChildren.map((child) => (
+                  <div key={child.id} className="relative">
+                    {renderTreeNode(child.id, level + 1)}
+                  </div>
+                ))}
+              </div>
+            ) : branchChildren.length > 0 && leafChildren.length > 1 ? (
+              /* Aralash: o'z oilasi/bolalari borlar gorizontal shoxlanadi, yolg'iz barglar esa bitta ustunga to'planadi */
+              <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center gap-8 sm:gap-12 relative`}>
+                {branchChildren.map((child) => (
+                  <div key={child.id} className="flex flex-col items-center relative">
+                    {renderTreeNode(child.id, level + 1)}
+                  </div>
+                ))}
+                <div className="flex flex-col items-center gap-4 sm:gap-5 relative">
+                  {leafChildren.map((child) => (
+                    <div key={child.id} className="relative">
+                      {renderTreeNode(child.id, level + 1)}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              /* Standart gorizontal taqsimot */
+              <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center gap-6 sm:gap-10 relative`}>
+                {children.map((child) => (
+                  <div key={child.id} className="flex flex-col items-center relative">
+                    {renderTreeNode(child.id, level + 1)}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1224,9 +1415,10 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
       {/* Draggable & Scalable Workspace */}
       <div
-        className="w-full h-full transform-gpu origin-top-left transition-transform duration-75"
+        className="w-full h-full transform-gpu origin-top-left"
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          willChange: 'transform',
         }}
       >
         <div 
@@ -1245,36 +1437,77 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
                 <stop offset="50%" stopColor="#14b8a6" stopOpacity="0.95" />
                 <stop offset="100%" stopColor="#059669" stopOpacity="0.95" />
               </linearGradient>
+              <linearGradient id="couple-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#10b981" />
+                <stop offset="50%" stopColor="#f43f5e" />
+                <stop offset="100%" stopColor="#10b981" />
+              </linearGradient>
               <filter id="kinship-glow" x="-20%" y="-20%" width="140%" height="140%">
                 <feDropShadow dx="0" dy="1" stdDeviation="2.5" floodColor="#10b981" floodOpacity="0.4" />
               </filter>
             </defs>
 
-            {kinshipLines.map((line) => (
-              <g key={line.id}>
-                {/* Contrast under-line */}
-                <path
-                  d={line.pathD}
-                  fill="none"
-                  stroke="rgba(0, 0, 0, 0.12)"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                />
-                {/* Primary elastic kinship line */}
-                <path
-                  d={line.pathD}
-                  fill="none"
-                  stroke="url(#kinship-line-grad)"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  filter="url(#kinship-glow)"
-                />
-                {/* Parent connection pin */}
-                <circle cx={line.startX} cy={line.startY} r="3.5" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
-                {/* Child connection pin */}
-                <circle cx={line.endX} cy={line.endY} r="3.5" fill="#059669" stroke="#ffffff" strokeWidth="1.5" />
-              </g>
-            ))}
+            {kinshipLines.map((line) => {
+              if (line.type === 'couple') {
+                return (
+                  <g key={line.id}>
+                    {/* Shadow under couple line */}
+                    <path
+                      d={line.pathD}
+                      fill="none"
+                      stroke="rgba(0, 0, 0, 0.15)"
+                      strokeWidth="5"
+                      strokeLinecap="round"
+                    />
+                    {/* Couple connection line */}
+                    <path
+                      d={line.pathD}
+                      fill="none"
+                      stroke="url(#couple-line-grad)"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeDasharray="6 3"
+                    />
+                    {line.midX !== undefined && line.midY !== undefined && (
+                      <g transform={`translate(${line.midX}, ${line.midY})`}>
+                        <circle r="12" fill="#ffffff" stroke="#f43f5e" strokeWidth="2" />
+                        <path
+                          d="M -5 -2 C -5 -5 -1 -5 0 -2 C 1 -5 5 -5 5 -2 C 5 2 0 6 0 6 C 0 6 -5 2 -5 -2 Z"
+                          fill="#f43f5e"
+                          transform="scale(0.85)"
+                        />
+                      </g>
+                    )}
+                  </g>
+                );
+              }
+
+              return (
+                <g key={line.id}>
+                  {/* Contrast under-line */}
+                  <path
+                    d={line.pathD}
+                    fill="none"
+                    stroke="rgba(0, 0, 0, 0.12)"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                  />
+                  {/* Primary elastic kinship line */}
+                  <path
+                    d={line.pathD}
+                    fill="none"
+                    stroke="url(#kinship-line-grad)"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    filter="url(#kinship-glow)"
+                  />
+                  {/* Parent connection pin */}
+                  <circle cx={line.startX} cy={line.startY} r="3.5" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+                  {/* Child connection pin */}
+                  <circle cx={line.endX} cy={line.endY} r="3.5" fill="#059669" stroke="#ffffff" strokeWidth="1.5" />
+                </g>
+              );
+            })}
           </svg>
 
           {isLoading && Object.keys(people).length === 0 ? (
