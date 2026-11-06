@@ -1,19 +1,5 @@
-/**
- * supabaseDb.ts
- * Telegram bot va WebApp o'rtasidagi Supabase integratsiyasi.
- * - public.users
- * - public.families
- * - public.family_members
- * - public.persons
- * - public.relationships
- * - public.invite_tokens (yangi tokenlar jadvali)
- * 
- * Xavfsizlik:
- * - Faqat VITE_SUPABASE_URL va VITE_SUPABASE_ANON_KEY ishlatiladi.
- * - Hech qanday Service Role Key yoki Bot Token frontendga kiritilmaydi.
- * - .env bo'lmaganda sayt xatoliksiz Lokal rejimda ishlaydi.
- */
-
+// Mavjud importlar ostiga qo'shing:
+import { SUPABASE_URL, SUPABASE_ANON_KEY, hasRealSupabaseCredentials } from './supabaseClient';
 import { Person, AuthUser } from '../types';
 
 const STORAGE_CUSTOM_URL = 'shajarachi_supabase_url';
@@ -21,14 +7,12 @@ const STORAGE_CUSTOM_KEY = 'shajarachi_supabase_anon_key';
 const STORAGE_INVITES_FALLBACK = 'shajarachi_supabase_invites_cache';
 
 export function getSupabaseCredentials(): { url: string; key: string } {
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-  const customUrl = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_CUSTOM_URL) || '' : '';
-  const customKey = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_CUSTOM_KEY) || '' : '';
-
-  const url = customUrl || envUrl;
-  const key = customKey || envKey;
-  return { url, key };
+  const customUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('shajarachi_supabase_url') || '' : '';
+  const customKey = typeof localStorage !== 'undefined' ? localStorage.getItem('shajarachi_supabase_anon_key') || '' : '';
+  return {
+    url: customUrl || SUPABASE_URL,
+    key: customKey || SUPABASE_ANON_KEY,
+  };
 }
 
 export function setSupabaseCredentials(url: string, key: string): void {
@@ -52,11 +36,10 @@ function headers(): Record<string, string> {
 
 export function isSupabaseConfigured(): boolean {
   const { url, key } = getSupabaseCredentials();
-  return Boolean(
-    url &&
-      !url.includes('your-project') &&
-      key &&
-      !key.includes('your-anon')
+  return (
+    url.startsWith('https://') &&
+    url.includes('.supabase.co') &&
+    key.length > 20
   );
 }
 
@@ -438,7 +421,7 @@ export async function syncPersonToSupabase(
       birth_date: person.birthDate || null,
       birth_year: person.birthYear || null,
       death_year: person.deathYear || null,
-      is_living: person.isAlive !== false,
+      is_alive: person.isAlive !== false,
       photo_url: person.photoUrl || null,
       notes: person.notes || null,
       biography: person.notes || null,
