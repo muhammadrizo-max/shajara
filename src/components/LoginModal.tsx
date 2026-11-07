@@ -164,109 +164,175 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     onLogin(authUser, { gender: regGender });
   };
 
-  const handleGoogleLogin = async () => {
-    setError('');
-    setGoogleFallbackInfo(null);
-    setIsGoogleLoading(true);
+  // LoginModal.tsx — handleGoogleLogin funksiyasini shu bilan almashtiring
 
-    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-    const isKnownOrigin = currentOrigin.includes('shajarachi.vercel.app') || currentOrigin.includes('shajarachi.uz');
+const handleGoogleLogin = async () => {
+  setError('');
+  setGoogleFallbackInfo(null);
+  setIsGoogleLoading(true);
 
-    // Safeguard: Foydalanuvchi hech qachon loading holatida qotib qolmasligini kafolatlaymiz
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
+  googleLoadingTimeoutRef.current = setTimeout(() => {
+    setIsGoogleLoading(false);
+    setGoogleFallbackInfo({
+      type: 'timeout',
+      title: "Google avtorizatsiya oynasi javob bermadi",
+      message: "Google oynasi o'z vaqtida yakunlanmadi. Brauzerda popup ruxsat bering yoki email/parol orqali kiring.",
+    });
+  }, 12000);
+
+  if (typeof window !== 'undefined' && !window.google?.accounts?.oauth2) {
     if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
-    googleLoadingTimeoutRef.current = setTimeout(() => {
-      setIsGoogleLoading(false);
-      if (!isKnownOrigin) {
-        setGoogleFallbackInfo({
-          type: 'origin_mismatch',
-          title: "Google OAuth: Domen ruxsati zarur",
-          message: `Google OAuth avtorizatsiyasi xavfsizlik talablariga ko'ra asosiy domenda (https://shajarachi.vercel.app) to'liq ishlaydi. Ushbu sinov muhitida esa Email/Parol yoki Telegram orqali xatosiz kirishingiz mumkin.`,
-          domain: currentOrigin,
-        });
-      } else {
-        setGoogleFallbackInfo({
-          type: 'timeout',
-          title: "Google avtorizatsiya oynasi javob bermadi",
-          message: "Google avtorizatsiya oynasi o'z vaqtida yakunlanmadi yoki brauzer qalqib chiquvchi oynani to'xtatdi. Iltimos, brauzerda popuplarga ruxsat bering yoki email/parol orqali kiring.",
-        });
-      }
-    }, isKnownOrigin ? 12000 : 7000);
+    setIsGoogleLoading(false);
+    setGoogleFallbackInfo({
+      type: 'sdk_failed',
+      title: "Google Identity xizmati yuklanmadi",
+      message: "Sahifani yangilang yoki email/parol orqali kiring.",
+    });
+    return;
+  }
 
-    // Agar Google Identity SDK umuman yuklanmagan bo'lsa
-    if (typeof window !== 'undefined' && !window.google?.accounts?.oauth2) {
-      if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
-      setIsGoogleLoading(false);
-      setGoogleFallbackInfo({
-        type: 'sdk_failed',
-        title: "Google Identity xizmati yuklanmadi",
-        message: "Brauzerda reklama to'suvchi (AdBlock, Brave Shields) yoqilgan bo'lishi yoki internet uzilgan bo'lishi mumkin. Sahifani yangilang yoki parolingiz orqali kiring.",
-      });
-      return;
-    }
+  try {
+    // 1. Google'dan profil olamiz
+    const authUser = await signInWithGooglePopup();
 
-    try {
-      const authUser = await signInWithGooglePopup();
-      
-      // Supabase / backend bilan sinxronlash
+    // 2. Supabase'ga to'g'ridan-to'g'ri upsert qilamiz
+    if (authUser.googleId && authUser.email) {
       try {
-        const synced = await syncGoogleUserWithBackend(authUser);
-        if (synced?.user) {
-          Object.assign(authUser, synced.user);
+        const sbUrl = (import.meta as any).env?.VITE_SUPABASE_URL || localStorage.getItem('shajarachi_supabase_url') || '';
+        const sbKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || localStorage.getItem('shajarachi_supabase_anon_key') || '';
+
+        if (sbUrl && sbKey && sbUrl.includes('supabase.co')) {
+          const h = {
+            'Content-Type': 'application/json',
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+            Prefer: 'return=representation',
+          };
+
+          // Email bo'yicha mavjudligini tekshir
+          const checkRes = await fetch(
+            `${sbUrl}/rest/v1/users?email=eq.${encodeURIComponent(authUser.email)}&select=id,person_id`,
+            { headers: h }
+          );
+          const existing = await checkRes.json();
+
+          let dbUserId: string;
+          let isNewUser = false;
+
+          if (Array.isArray(existing) && existing.length > 0) {
+            // Mavjud foydalanuvchi
+            dbUserId = existing[0].id;
+            await fetch(`${sbUrl}/rest/v1/users?id=eq.${dbUserId}`, {
+              method: 'PATCH',
+              headers: h,
+              body: JSON.stringify({
+                google_id: authUser.googleId,
+                photo_url: authUser.photoUrl || null,
+                last_login: new Date().toISOString(),
+              }),
+            });
+            if (existing[0].person_id) {
+              authUser.personId = existing[0].person_id;
+            }
+          } else {
+            // Yangi foydalanuvchi
+            isNewUser = true;
+            const createRes = await fetch(`${sbUrl}/rest/v1/users`, {
+              method: 'POST',
+              headers: h,
+              body: JSON.stringify({
+                google_id: authUser.googleId,
+                full_name: authUser.fullName,
+                email: authUser.email,
+                photo_url: authUser.photoUrl || null,
+                role: 'owner',
+                created_at: new Date().toISOString(),
+                last_login: new Date().toISOString(),
+              }),
+            });
+            const created = await createRes.json();
+            dbUserId = Array.isArray(created) && created.length > 0
+              ? created[0].id
+              : `google_${authUser.googleId}`;
+          }
+
+          // Haqiqiy UUID ni set qilamiz
+          authUser.id = dbUserId;
+
+          // Oila a'zoligini tekshir
+          const memRes = await fetch(
+            `${sbUrl}/rest/v1/family_members?user_id=eq.${dbUserId}&select=family_id`,
+            { headers: h }
+          );
+          const members = await memRes.json();
+
+          if (Array.isArray(members) && members.length > 0) {
+            authUser.familyId = members[0].family_id;
+          } else if (isNewUser) {
+            // Yangi oila yaratamiz
+            const famRes = await fetch(`${sbUrl}/rest/v1/families`, {
+              method: 'POST',
+              headers: h,
+              body: JSON.stringify({
+                name: `${authUser.name}ning Shajarasi`,
+                created_by: dbUserId,
+                created_at: new Date().toISOString(),
+              }),
+            });
+            const families = await famRes.json();
+            if (Array.isArray(families) && families.length > 0) {
+              authUser.familyId = families[0].id;
+              // Trigger qo'shadi, lekin backup:
+              await fetch(`${sbUrl}/rest/v1/family_members`, {
+                method: 'POST',
+                headers: { ...h, Prefer: 'resolution=merge-duplicates' },
+                body: JSON.stringify({
+                  family_id: authUser.familyId,
+                  user_id: dbUserId,
+                  role: 'owner',
+                }),
+              }).catch(() => {});
+            }
+          }
         }
-      } catch (syncErr) {
-        console.warn("[Google Auth] Backend sync e'tiborga olinmadi:", syncErr);
+      } catch (sbErr) {
+        console.warn('[Google Auth] Supabase upsert xatolik (lokal rejim davom etadi):', sbErr);
       }
-
-      setCurrentSessionUser(authUser);
-      onLogin(authUser, { gender: regGender });
-    } catch (err: any) {
-      const errMsg = err?.message || '';
-      const errCode = err?.code;
-
-      const isPopupBlocked = 
-        errCode === 'POPUP_BLOCKED' || 
-        errMsg.includes('popup_failed_to_open') || 
-        errMsg.includes('bloklandi');
-
-      const isCancelled = 
-        err instanceof GoogleAuthCancelledError ||
-        errCode === 'POPUP_CLOSED' || 
-        err?.isCancelled ||
-        errMsg.includes('Popup window closed') || 
-        errMsg.includes('popup_closed') ||
-        errMsg.includes('bekor qilindi');
-
-      if (isPopupBlocked) {
-        setGoogleFallbackInfo({
-          type: 'popup_blocked',
-          title: "Qalqib chiquvchi oyna (popup) bloklandi",
-          message: "Brauzeringiz Google oynasini avtomatik to'xtatdi. Brauzer qidiruv qatoridagi popup belgisini bosib, «Ruxsat berish» (Always allow)ni tanlang yoki boshqa usul bilan kiring.",
-        });
-      } else if (isCancelled || !isKnownOrigin) {
-        if (!isKnownOrigin) {
-          setGoogleFallbackInfo({
-            type: 'origin_mismatch',
-            title: "Google OAuth: Domen ruxsati zarur",
-            message: `Google OAuth avtorizatsiyasi xavfsizlik talablariga ko'ra asosiy domenda (https://shajarachi.vercel.app) to'liq ishlaydi. Ushbu sinov muhitida esa Email/Parol yoki Telegram orqali xatosiz kirishingiz mumkin.`,
-            domain: currentOrigin,
-          });
-        } else {
-          setError("Google hisobini tanlash bekor qilindi.");
-        }
-      } else {
-        setGoogleFallbackInfo({
-          type: 'other',
-          title: "Google orqali kirish amalga oshmadi",
-          message: errMsg || "Google Identity xizmatiga ulanib bo'lmadi. Email/Parol yoki Telegram orqali kirishingiz mumkin.",
-        });
-      }
-    } finally {
-      if (googleLoadingTimeoutRef.current) {
-        clearTimeout(googleLoadingTimeoutRef.current);
-      }
-      setIsGoogleLoading(false);
     }
-  };
+
+    // 3. Session va App state ni yangilaymiz
+    setCurrentSessionUser(authUser);
+    onLogin(authUser, { gender: regGender });
+
+  } catch (err: any) {
+    const errCode = err?.code;
+    const errMsg = err?.message || '';
+    const isCancelled = err instanceof GoogleAuthCancelledError || errCode === 'POPUP_CLOSED' || err?.isCancelled;
+    const isPopupBlocked = errCode === 'POPUP_BLOCKED';
+
+    if (isPopupBlocked) {
+      setGoogleFallbackInfo({
+        type: 'popup_blocked',
+        title: "Qalqib chiquvchi oyna bloklandi",
+        message: "Brauzer qidiruv qatoridagi popup belgisini bosib, «Ruxsat berish»ni tanlang.",
+      });
+    } else if (isCancelled) {
+      setError("Google hisobini tanlash bekor qilindi.");
+    } else {
+      setGoogleFallbackInfo({
+        type: 'other',
+        title: "Google orqali kirish amalga oshmadi",
+        message: errMsg || "Email/Parol yoki Telegram orqali kirishingiz mumkin.",
+      });
+    }
+  } finally {
+    if (googleLoadingTimeoutRef.current) clearTimeout(googleLoadingTimeoutRef.current);
+    setIsGoogleLoading(false);
+  }
+};
 
   // Kirish
   const handleLogin = (e: React.FormEvent) => {
