@@ -389,3 +389,132 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
   });
 }
 
+// src/utils/googleAuth.ts — oxiriga qo'shing
+
+import { isSupabaseConfigured, getSupabaseCredentials } from './supabaseClient';
+
+/**
+ * Google foydalanuvchisini Supabase users jadvaliga upsert qilish.
+ * Mavjud bo'lsa yangilanadi (email yoki google_id bo'yicha),
+ * yangi bo'lsa yaratiladi.
+ * Qaytaradi: Supabase'dagi haqiqiy UUID va familyId.
+ */
+export async function upsertGoogleUserToSupabase(profile: {
+  sub: string;
+  email: string;
+  name: string;
+  given_name?: string;
+  family_name?: string;
+  picture?: string;
+}): Promise<{
+  id: string;
+  familyId?: string;
+  personId?: string;
+  isNewUser: boolean;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const { url, key } = getSupabaseCredentials();
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    Prefer: 'return=representation',
+  };
+
+  try {
+    // 1. Avval email bo'yicha mavjudligini tekshir
+    const checkRes = await fetch(
+      `${url}/rest/v1/users?email=eq.${encodeURIComponent(profile.email)}&select=id,person_id`,
+      { headers }
+    );
+    const existing = await checkRes.json();
+
+    let userId: string;
+    let isNewUser = false;
+
+    if (Array.isArray(existing) && existing.length > 0) {
+      // Mavjud foydalanuvchi — google_id va photo_url ni yangilaymiz
+      userId = existing[0].id;
+      await fetch(`${url}/rest/v1/users?id=eq.${userId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          google_id: profile.sub,
+          photo_url: profile.picture || null,
+          last_login: new Date().toISOString(),
+        }),
+      });
+    } else {
+      // Yangi foydalanuvchi — yaratamiz
+      isNewUser = true;
+      const createRes = await fetch(`${url}/rest/v1/users`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          google_id: profile.sub,
+          full_name: profile.name,
+          email: profile.email,
+          photo_url: profile.picture || null,
+          role: 'owner',
+          created_at: new Date().toISOString(),
+          last_login: new Date().toISOString(),
+        }),
+      });
+      const created = await createRes.json();
+      if (!Array.isArray(created) || created.length === 0) return null;
+      userId = created[0].id;
+    }
+
+    // 2. Oila a'zoligini tekshir
+    const memRes = await fetch(
+      `${url}/rest/v1/family_members?user_id=eq.${userId}&select=family_id`,
+      { headers }
+    );
+    const members = await memRes.json();
+    let familyId: string | undefined;
+
+    if (Array.isArray(members) && members.length > 0) {
+      familyId = members[0].family_id;
+    } else if (isNewUser) {
+      // Yangi foydalanuvchi uchun yangi oila yaratamiz
+      const famRes = await fetch(`${url}/rest/v1/families`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: `${profile.given_name || profile.name}ning Shajarasi`,
+          created_by: userId,
+          created_at: new Date().toISOString(),
+        }),
+      });
+      const families = await famRes.json();
+      if (Array.isArray(families) && families.length > 0) {
+        familyId = families[0].id;
+        // family_members trigger avtomatik qo'shadi,
+        // lekin ishonch hosil qilish uchun qo'lda ham qo'shamiz
+        await fetch(`${url}/rest/v1/family_members`, {
+          method: 'POST',
+          headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({
+            family_id: familyId,
+            user_id: userId,
+            role: 'owner',
+          }),
+        }).catch(() => {});
+      }
+    }
+
+    // 3. users.person_id ni olish
+    const userRes = await fetch(
+      `${url}/rest/v1/users?id=eq.${userId}&select=person_id`,
+      { headers }
+    );
+    const userRow = await userRes.json();
+    const personId = userRow?.[0]?.person_id || undefined;
+
+    return { id: userId, familyId, personId, isNewUser };
+  } catch (err) {
+    console.warn('[upsertGoogleUserToSupabase] xatolik:', err);
+    return null;
+  }
+}
