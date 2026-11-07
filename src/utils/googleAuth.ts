@@ -307,10 +307,9 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
       return reject(new Error("Brauzer muhiti topilmadi"));
     }
 
-    // Google GIS OAuth2 mijozining yuklanganligini tekshirish
     if (!window.google?.accounts?.oauth2) {
       return reject(
-        new Error("Google Identity xizmati hali yuklanmadi. Iltimos, sahifani yangilang yoki bir necha soniyadan so'ng qayta bosing.")
+        new Error("Google Identity xizmati hali yuklanmadi.")
       );
     }
 
@@ -318,29 +317,142 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'email profile openid',
-        prompt: 'select_account', // Har bir userga o'z Google hisobini tanlash oynasini chiqaradi
+        prompt: 'select_account',
         callback: async (tokenResponse: any) => {
           if (tokenResponse?.error) {
             return reject(new Error(tokenResponse.error_description || tokenResponse.error));
           }
 
           try {
-            // Google'ning rasmiy UserInfo endpointidan haqiqiy foydalanuvchi ma'lumotlarini olish
             const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: {
-                Authorization: `Bearer ${tokenResponse.access_token}`,
-              },
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
             });
 
-            if (!res.ok) {
-              throw new Error("Google profil ma'lumotlarini olishda xatolik yuz berdi");
-            }
+            if (!res.ok) throw new Error("Google profil ma'lumotlarini olishda xatolik");
 
             const profile = await res.json();
             const parts = (profile.name || '').trim().split(' ');
 
+            // ═══════════════════════════════════════════════
+            // SUPABASE UPSERT — shu yerda bajariladi
+            // ═══════════════════════════════════════════════
+            const sbUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+            const sbKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+
+            let dbUserId = `google_${profile.sub}`;
+            let dbFamilyId: string | undefined;
+            let dbPersonId: string | undefined;
+
+            if (sbUrl && sbKey && sbUrl.includes('supabase.co')) {
+              const h = {
+                'Content-Type': 'application/json',
+                apikey: sbKey,
+                Authorization: `Bearer ${sbKey}`,
+                Prefer: 'return=representation',
+              };
+
+              try {
+                // 1. Email bo'yicha mavjudligini tekshir
+                const checkRes = await fetch(
+                  `${sbUrl}/rest/v1/users?email=eq.${encodeURIComponent(profile.email)}&select=id,person_id`,
+                  { headers: h }
+                );
+                const existing = await checkRes.json();
+
+                let isNewUser = false;
+
+                if (Array.isArray(existing) && existing.length > 0) {
+                  // Mavjud foydalanuvchi
+                  dbUserId = existing[0].id;
+                  if (existing[0].person_id) dbPersonId = existing[0].person_id;
+
+                  await fetch(`${sbUrl}/rest/v1/users?id=eq.${dbUserId}`, {
+                    method: 'PATCH',
+                    headers: h,
+                    body: JSON.stringify({
+                      google_id: profile.sub,
+                      photo_url: profile.picture || null,
+                      last_login: new Date().toISOString(),
+                    }),
+                  });
+                } else {
+                  // Yangi foydalanuvchi
+                  isNewUser = true;
+                  const createRes = await fetch(`${sbUrl}/rest/v1/users`, {
+                    method: 'POST',
+                    headers: h,
+                    body: JSON.stringify({
+                      google_id: profile.sub,
+                      full_name: profile.name,
+                      email: profile.email,
+                      photo_url: profile.picture || null,
+                      role: 'owner',
+                      created_at: new Date().toISOString(),
+                      last_login: new Date().toISOString(),
+                    }),
+                  });
+                  const created = await createRes.json();
+                  if (Array.isArray(created) && created.length > 0) {
+                    dbUserId = created[0].id;
+                  }
+                }
+
+                // 2. Oila a'zoligini tekshir
+                const memRes = await fetch(
+                  `${sbUrl}/rest/v1/family_members?user_id=eq.${dbUserId}&select=family_id`,
+                  { headers: h }
+                );
+                const members = await memRes.json();
+
+                if (Array.isArray(members) && members.length > 0) {
+                  dbFamilyId = members[0].family_id;
+                } else if (isNewUser) {
+                  // Yangi oila yaratish
+                  const famRes = await fetch(`${sbUrl}/rest/v1/families`, {
+                    method: 'POST',
+                    headers: h,
+                    body: JSON.stringify({
+                      name: `${profile.given_name || profile.name}ning Shajarasi`,
+                      created_by: dbUserId,
+                      created_at: new Date().toISOString(),
+                    }),
+                  });
+                  const families = await famRes.json();
+                  if (Array.isArray(families) && families.length > 0) {
+                    dbFamilyId = families[0].id;
+                    // Trigger backup:
+                    await fetch(`${sbUrl}/rest/v1/family_members`, {
+                      method: 'POST',
+                      headers: { ...h, Prefer: 'resolution=merge-duplicates' },
+                      body: JSON.stringify({
+                        family_id: dbFamilyId,
+                        user_id: dbUserId,
+                        role: 'owner',
+                      }),
+                    }).catch(() => {});
+                  }
+                }
+
+                // 3. person_id ni tekshir (agar oldin olinmagan bo'lsa)
+                if (!dbPersonId) {
+                  const userRow = await fetch(
+                    `${sbUrl}/rest/v1/users?id=eq.${dbUserId}&select=person_id`,
+                    { headers: h }
+                  );
+                  const userData = await userRow.json();
+                  if (Array.isArray(userData) && userData[0]?.person_id) {
+                    dbPersonId = userData[0].person_id;
+                  }
+                }
+
+              } catch (sbErr) {
+                console.warn('[Google Auth] Supabase upsert xatolik:', sbErr);
+              }
+            }
+            // ═══════════════════════════════════════════════
+
             const authUser: AuthUser = {
-              id: `google_${profile.sub}`,
+              id: dbUserId,                    // ← endi haqiqiy Supabase UUID
               name: profile.given_name || parts[0] || 'Foydalanuvchi',
               surname: profile.family_name || parts.slice(1).join(' ') || undefined,
               fullName: profile.name || profile.email,
@@ -350,6 +462,8 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
               isGuest: false,
               authProvider: 'google',
               googleId: profile.sub,
+              familyId: dbFamilyId,            // ← endi haqiqiy familyId
+              personId: dbPersonId,            // ← endi haqiqiy personId
             };
 
             resolve(authUser);
@@ -360,28 +474,21 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
         error_callback: (nonOAuthError: any) => {
           const type = nonOAuthError?.type;
           const msg = nonOAuthError?.message || '';
-          const isClosed = 
-            type === 'popup_closed' || 
-            msg.includes('Popup window closed') || 
-            msg.includes('popup_closed');
-          const isBlocked = 
-            type === 'popup_failed_to_open';
+          const isClosed = type === 'popup_closed' || msg.includes('popup_closed');
+          const isBlocked = type === 'popup_failed_to_open';
 
           if (isClosed) {
             reject(new GoogleAuthCancelledError());
           } else if (isBlocked) {
-            const err = new Error("Brauzeringizda qalqib chiquvchi oyna (popup) bloklandi. Iltimos, brauzer qatorida ruxsat bering.");
+            const err = new Error("Popup bloklandi. Brauzerda ruxsat bering.");
             (err as any).code = 'POPUP_BLOCKED';
             reject(err);
           } else {
-            const err = new Error(msg || "Google tizimiga ulanish bekor qilindi");
-            (err as any).code = 'AUTH_FAILED';
-            reject(err);
+            reject(new Error(msg || "Google tizimiga ulanish bekor qilindi"));
           }
         },
       });
 
-      // Foydalanuvchi bosishi (user gesture) bilan bir vaqtda to'g'ridan-to'g'ri chaqirish
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch (err: any) {
       reject(err);
