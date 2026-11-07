@@ -4,6 +4,7 @@
  */
 
 import { AuthUser } from '../types';
+import { getSupabaseCredentials, isSupabaseConfigured } from './supabaseDb';
 
 export const GOOGLE_CLIENT_ID = 
   (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 
@@ -336,14 +337,13 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
             // ═══════════════════════════════════════════════
             // SUPABASE UPSERT — shu yerda bajariladi
             // ═══════════════════════════════════════════════
-            const sbUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-            const sbKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+            const { url: sbUrl, key: sbKey } = getSupabaseCredentials();
 
             let dbUserId = `google_${profile.sub}`;
             let dbFamilyId: string | undefined;
             let dbPersonId: string | undefined;
 
-            if (sbUrl && sbKey && sbUrl.includes('supabase.co')) {
+            if (isSupabaseConfigured()) {
               const h = {
                 'Content-Type': 'application/json',
                 apikey: sbKey,
@@ -497,9 +497,6 @@ export function signInWithGooglePopup(): Promise<AuthUser> {
 }
 
 // src/utils/googleAuth.ts — oxiriga qo'shing
-
-import { isSupabaseConfigured, getSupabaseCredentials } from './supabaseClient';
-
 /**
  * Google foydalanuvchisini Supabase users jadvaliga upsert qilish.
  * Mavjud bo'lsa yangilanadi (email yoki google_id bo'yicha),
