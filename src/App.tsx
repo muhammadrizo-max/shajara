@@ -10,6 +10,8 @@ import {
   importStateFromJSON,
   clearAllShajaraData
 } from './utils/storage';
+// App.tsx imports qatoriga qo'shing (mavjud importlar o'rtasiga)
+import { getSupabaseCredentials } from './utils/supabaseDb';
 import { hydrateAllMediaUrls } from './utils/mediaStorage';
 import { addHistoryRecord } from './utils/historyStorage';
 import { getCurrentSessionUser, setCurrentSessionUser } from './utils/userAuthStorage';
@@ -330,106 +332,224 @@ export default function App() {
     );
   };
 
-  // Login handler
-  const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender }) => {
-    let userTree: FamilyTreeState | null = null;
+  // App.tsx — handleLogin funksiyasini shu bilan almashtiring
+const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender }) => {
+  
+  // ═══════════════════════════════════════════════════════
+  // 1. GOOGLE FOYDALANUVCHISINI SUPABASE BILAN SINXRONLASH
+  // ═══════════════════════════════════════════════════════
+  if (user.authProvider === 'google' && user.googleId) {
+    try {
+      const { url, key } = getSupabaseCredentials();
+      const h = {
+        'Content-Type': 'application/json',
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        Prefer: 'return=representation',
+      };
 
-    // 1. Agar Supabase ulangan bo'lsa va foydalanuvchida familyId bo'lsa: loadFamilyDataFromSupabase(user.familyId) orqali yuklang
+      // Email bo'yicha mavjudligini tekshir
+      const checkRes = await fetch(
+        `${url}/rest/v1/users?email=eq.${encodeURIComponent(user.email!)}&select=id,person_id`,
+        { headers: h }
+      );
+      const existing = await checkRes.json();
+
+      let dbUserId: string;
+      let isNewUser = false;
+
+      if (Array.isArray(existing) && existing.length > 0) {
+        // Mavjud foydalanuvchi — yangilaymiz
+        dbUserId = existing[0].id;
+        await fetch(`${url}/rest/v1/users?id=eq.${dbUserId}`, {
+          method: 'PATCH',
+          headers: h,
+          body: JSON.stringify({
+            google_id: user.googleId,
+            photo_url: user.photoUrl || null,
+            last_login: new Date().toISOString(),
+          }),
+        });
+        // Agar person_id mavjud bo'lsa, userimizni yangilaymiz
+        if (existing[0].person_id) {
+          user = { ...user, personId: existing[0].person_id };
+        }
+      } else {
+        // Yangi foydalanuvchi — bazaga yozamiz
+        isNewUser = true;
+        const createRes = await fetch(`${url}/rest/v1/users`, {
+          method: 'POST',
+          headers: h,
+          body: JSON.stringify({
+            google_id: user.googleId,
+            full_name: user.fullName || `${user.name} ${user.surname || ''}`.trim(),
+            email: user.email,
+            photo_url: user.photoUrl || null,
+            role: 'owner',
+            created_at: new Date().toISOString(),
+            last_login: new Date().toISOString(),
+          }),
+        });
+        const created = await createRes.json();
+        if (Array.isArray(created) && created.length > 0) {
+          dbUserId = created[0].id;
+        } else {
+          dbUserId = user.id; // fallback
+        }
+      }
+
+      // Haqiqiy UUID ni user.id ga o'rnatamiz
+      user = { ...user, id: dbUserId };
+
+      // Oilani tekshirish
+      const memRes = await fetch(
+        `${url}/rest/v1/family_members?user_id=eq.${dbUserId}&select=family_id`,
+        { headers: h }
+      );
+      const members = await memRes.json();
+
+      if (Array.isArray(members) && members.length > 0) {
+        user = { ...user, familyId: members[0].family_id };
+      } else if (isNewUser) {
+        // Yangi oila yaratish
+        const famRes = await fetch(`${url}/rest/v1/families`, {
+          method: 'POST',
+          headers: h,
+          body: JSON.stringify({
+            name: `${user.name}ning Shajarasi`,
+            created_by: dbUserId,
+            created_at: new Date().toISOString(),
+          }),
+        });
+        const families = await famRes.json();
+        if (Array.isArray(families) && families.length > 0) {
+          user = { ...user, familyId: families[0].id };
+          // Trigger avtomatik qo'shadi, lekin backup:
+          await fetch(`${url}/rest/v1/family_members`, {
+            method: 'POST',
+            headers: { ...h, Prefer: 'resolution=merge-duplicates' },
+            body: JSON.stringify({
+              family_id: user.familyId,
+              user_id: dbUserId,
+              role: 'owner',
+            }),
+          }).catch(() => {});
+        }
+      }
+
+    } catch (err) {
+      console.warn('[handleLogin] Supabase Google upsert xatolik:', err);
+      // Xatolikda ham davom etamiz (lokal rejim)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 2. SHAJARA MA'LUMOTLARINI YUKLASH
+  // ═══════════════════════════════════════════════════════
+  let userTree: FamilyTreeState | null = null;
+
+  if (user.familyId) {
+    try {
+      const sbRes = await loadFamilyDataFromSupabase(user.familyId);
+      if (sbRes.success && sbRes.people && Object.keys(sbRes.people).length > 0) {
+        userTree = {
+          people: sbRes.people,
+          rootId: sbRes.rootId || Object.keys(sbRes.people)[0] || '',
+          meId: user.personId && sbRes.people[user.personId]
+            ? user.personId
+            : (sbRes.meId || Object.keys(sbRes.people)[0] || ''),
+          currentUser: user,
+          activePerspectiveId: undefined,
+        };
+      }
+    } catch (err) {
+      console.warn("Supabase oila yuklanmadi:", err);
+    }
+  }
+
+  if (!userTree) {
+    userTree = loadFamilyTreeState(user.id);
+  }
+
+  if (!userTree || Object.keys(userTree.people).length === 0) {
+    try {
+      const cloudTree = await fetchTreeFromCloud(user.id, user.email);
+      if (cloudTree && cloudTree.people && Object.keys(cloudTree.people).length > 0) {
+        userTree = cloudTree;
+      }
+    } catch (cloudErr) {
+      console.warn("[Cloud Sync]:", cloudErr);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 3. BIRINCHI KIRISH — YANGI SHAXS YARATISH
+  // ═══════════════════════════════════════════════════════
+  if (!userTree || Object.keys(userTree.people).length === 0) {
+    const newPersonId = `p_${Date.now()}`;
+    const newPerson: Person = {
+      id: newPersonId,
+      name: user.name,
+      surname: user.surname,
+      gender: initialPersonData?.gender || 'male',
+      parentId: null,
+      generation: 1,
+      isAlive: true,
+      photoUrl: user.photoUrl,
+      occupation: "Shajara egasi",
+      notes: "Shajara asoschisi",
+    };
+
+    const updatedUser: AuthUser = { ...user, personId: newPersonId, role: 'owner' };
+    setCurrentSessionUser(updatedUser);
+
+    // Supabase'ga persons jadvaliga yozamiz
     if (user.familyId) {
+      syncPersonToSupabase(newPerson, user.familyId, user.id).catch(() => {});
+      
+      // users.person_id ni yangilaymiz
       try {
-        const sbRes = await loadFamilyDataFromSupabase(user.familyId);
-        if (sbRes.success && sbRes.people && Object.keys(sbRes.people).length > 0) {
-          userTree = {
-            people: sbRes.people,
-            rootId: sbRes.rootId || Object.keys(sbRes.people)[0] || '',
-            meId: sbRes.meId || (user.personId && sbRes.people[user.personId] ? user.personId : Object.keys(sbRes.people)[0] || ''),
-            currentUser: user,
-            activePerspectiveId: undefined,
-          };
-        }
-      } catch (err) {
-        console.warn("Supabase oila yuklanmadi, lokal yuklanadi:", err);
-      }
+        const { url, key } = getSupabaseCredentials();
+        await fetch(`${url}/rest/v1/users?id=eq.${user.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({ person_id: newPersonId }),
+        });
+      } catch (e) {}
     }
 
-    // 2. Aks holda lokal xotiradan: loadFamilyTreeState(user.id) orqali yuklang
-    if (!userTree) {
-      userTree = loadFamilyTreeState(user.id);
-    }
+    const newState: FamilyTreeState = {
+      people: { [newPersonId]: newPerson },
+      rootId: newPersonId,
+      meId: newPersonId,
+      currentUser: updatedUser,
+      activePerspectiveId: undefined,
+      familyName: `${user.name} shajarasi`,
+    };
+    setState(newState);
+    saveFamilyTreeState(newState, user.id);
+    setSelectedPerson(newPerson);
+    showToast(`Tabriklaymiz, ${user.name}! Shajarangiz yaratildi. 🌳`);
+  } else {
+    const updatedUser: AuthUser = {
+      ...user,
+      personId: user.personId || userTree.meId || undefined,
+      role: user.role || 'owner',
+    };
+    setCurrentSessionUser(updatedUser);
+    const newState: FamilyTreeState = { ...userTree, currentUser: updatedUser };
+    setState(newState);
+    saveFamilyTreeState(newState, user.id);
+    showToast(`Xush kelibsiz, ${user.name}! Shajarangiz yuklandi. 🌳`);
+  }
 
-    // 2.1 Server/Cloud bazasidan sinxronlash (Telefon <-> Kompyuter o'rtasida shajara bir xil bo'lishi uchun)
-    if (!userTree || Object.keys(userTree.people).length === 0) {
-      try {
-        const cloudTree = await fetchTreeFromCloud(user.id, user.email);
-        if (cloudTree && cloudTree.people && Object.keys(cloudTree.people).length > 0) {
-          userTree = cloudTree;
-        }
-      } catch (cloudErr) {
-        console.warn("[Cloud Sync] Serverdan shajara yuklanmadi:", cloudErr);
-      }
-    }
-
-    // 3. Agar foydalanuvchining shajarasi bo'sh bo'lsa (Object.keys(loadedTree.people).length === 0), foydalanuvchining o'zini birinchi tugun (Root Person - Shajara Egasi) qilib yarating va saqlang:
-    if (!userTree || Object.keys(userTree.people).length === 0) {
-      const newPersonId = `p_${Date.now()}`;
-      const newPerson: Person = {
-        id: newPersonId,
-        name: user.name,
-        surname: user.surname,
-        gender: initialPersonData?.gender || 'male',
-        parentId: null,
-        generation: 1,
-        isAlive: true,
-        occupation: "Shajara egasi",
-        avatarColor: initialPersonData?.gender === 'female' ? 'from-rose-500 to-pink-700' : 'from-emerald-600 to-teal-800',
-        notes: "Shajara asoschisi",
-      };
-
-      const updatedUser: AuthUser = { ...user, personId: newPersonId, role: 'owner' as const };
-      setCurrentSessionUser(updatedUser);
-
-      const newState: FamilyTreeState = {
-        people: { [newPersonId]: newPerson },
-        rootId: newPersonId,
-        meId: newPersonId,
-        currentUser: updatedUser,
-        activePerspectiveId: undefined,
-        familyName: `${user.name} shajarasi`,
-      };
-      setState(newState);
-      saveFamilyTreeState(newState, user.id);
-
-      addHistoryRecord({
-        action: 'person_add',
-        actorName: user.fullName || user.name,
-        personName: user.fullName || user.name,
-        personId: newPersonId,
-        title: "Yangi shajaraga asos solindi",
-        description: `${user.fullName || user.name} tomonidan shajara yaratildi va birinchi a'zo kiritildi.`,
-      });
-
-      setSelectedPerson(newPerson);
-      showToast(`Tabriklaymiz, ${user.name}! Shajarangiz yaratildi.`);
-    } else {
-      const updatedUser: AuthUser = {
-        ...user,
-        personId: user.personId || userTree.meId || undefined,
-        role: user.role || 'owner',
-      };
-      setCurrentSessionUser(updatedUser);
-
-      const newState: FamilyTreeState = {
-        ...userTree,
-        currentUser: updatedUser,
-      };
-      setState(newState);
-      saveFamilyTreeState(newState, user.id);
-      showToast(`Xush kelibsiz, ${user.name}! Shajarangiz yuklandi.`);
-    }
-
-    setViewMode('tree');
-    setIsLoginModalOpen(false);
-  };
+  setViewMode('tree');
+  setIsLoginModalOpen(false);
+};
 
   // Temporary Perspective handlers
   const handleSetTemporaryPerspective = (personId: string) => {
