@@ -529,7 +529,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
   // 3. BIRINCHI KIRISH — YANGI SHAXS YARATISH
   // ═══════════════════════════════════════════════════════
   if (!userTree || Object.keys(userTree.people).length === 0) {
-    const newPersonId = `p_${Date.now()}`;
+    const newPersonId = crypto.randomUUID();
     const newPerson: Person = {
       id: newPersonId,
       name: user.name,
