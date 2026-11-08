@@ -518,3 +518,45 @@ export async function syncLinksToSupabase(people: Record<string, Person>): Promi
     }).catch(() => {});
   }
 }
+
+// Shaxsni bazadan butunlay o'chirish
+export async function deletePersonFromSupabase(personId: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isUuid(personId)) return false;
+  const { url } = getSupabaseCredentials();
+
+  try {
+    // Bu shaxsga ishora qilayotgan barcha bog'lanishlarni tozalaymiz
+    await fetch(`${url}/rest/v1/persons?parent_id=eq.${personId}`, {
+      method: 'PATCH',
+      headers: { ...headers(), Prefer: 'return=minimal' },
+      body: JSON.stringify({ parent_id: null }),
+    }).catch(() => {});
+    await fetch(`${url}/rest/v1/persons?mother_id=eq.${personId}`, {
+      method: 'PATCH',
+      headers: { ...headers(), Prefer: 'return=minimal' },
+      body: JSON.stringify({ mother_id: null }),
+    }).catch(() => {});
+    await fetch(`${url}/rest/v1/persons?spouse_id=eq.${personId}`, {
+      method: 'PATCH',
+      headers: { ...headers(), Prefer: 'return=minimal' },
+      body: JSON.stringify({ spouse_id: null }),
+    }).catch(() => {});
+    await fetch(`${url}/rest/v1/relationships?related_person_id=eq.${personId}`, {
+      method: 'DELETE',
+      headers: { ...headers(), Prefer: 'return=minimal' },
+    }).catch(() => {});
+
+    const res = await fetch(`${url}/rest/v1/persons?id=eq.${personId}`, {
+      method: 'DELETE',
+      headers: { ...headers(), Prefer: 'return=minimal' },
+    });
+    if (!res.ok) {
+      console.warn('[persons] o\'chirish xatosi:', await res.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Delete person warning:', e);
+    return false;
+  }
+}
