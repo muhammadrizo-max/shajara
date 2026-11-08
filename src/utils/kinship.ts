@@ -218,7 +218,7 @@ export function findLowestCommonAncestor(
 }
 
 // Calculate Kinship relation from reference person (Me / Reference) to Target Person
-export function calculateKinship(
+export function calculateKinshipOld(
   fromPersonId: string,
   toPersonId: string,
   people: Record<string, Person>
@@ -554,3 +554,4 @@ export function calculateKinship(
     isDirectDescendant: false,
   };
 }
+export { calculateKinship } from './kinshipLabels';
