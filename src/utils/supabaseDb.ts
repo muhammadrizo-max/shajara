@@ -66,6 +66,8 @@ function dbPersonToLocal(p: any): Person {
     notes: p.notes || p.biography || undefined,
     generation: p.generation || 1,
     linkedUserId: p.linked_user_id || undefined,
+    motherId: p.mother_id ? String(p.mother_id) : undefined,
+    spouseId: p.spouse_id ? String(p.spouse_id) : undefined,
   } as Person;
 }
 
@@ -494,5 +496,25 @@ export async function syncAllPeopleToSupabase(
     if (done) ok++;
     else failed++;
   }
+  await syncLinksToSupabase(people);
   return { ok, failed };
+}
+// Ona va turmush o'rtoq bog'lanishlarini alohida (ikkinchi bosqichda) yozamiz.
+// Shunda ota-ona/turmush o'rtoq hali bazaga yozilmagan bo'lsa ham FK xatosi chiqmaydi.
+export async function syncLinksToSupabase(people: Record<string, Person>): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const { url } = getSupabaseCredentials();
+
+  for (const p of Object.values(people) as Person[]) {
+    if (!isUuid(p.id)) continue;
+    const motherId = isUuid(p.motherId) && people[p.motherId!] ? p.motherId! : null;
+    const spouseId = isUuid(p.spouseId) && people[p.spouseId!] ? p.spouseId! : null;
+    if (!motherId && !spouseId) continue;
+
+    await fetch(`${url}/rest/v1/persons?id=eq.${p.id}`, {
+      method: 'PATCH',
+      headers: { ...headers(), Prefer: 'return=minimal' },
+      body: JSON.stringify({ mother_id: motherId, spouse_id: spouseId }),
+    }).catch(() => {});
+  }
 }
