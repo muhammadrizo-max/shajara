@@ -409,13 +409,23 @@ export async function syncPersonToSupabase(
 
   const { url } = getSupabaseCredentials();
 
+  // Oila va foydalanuvchi ID sini aniqlaymiz.
+  // Chaqiruvchi bermagan bo'lsa, joriy sessiyadan olamiz.
+  let fam: string | undefined = familyId;
+  let creator: string | undefined = userId;
   try {
-    const personPayload = {
+    const raw = localStorage.getItem('shajara_clean_current_session_v2');
+    const sess = raw ? JSON.parse(raw) : null;
+    fam = fam || sess?.familyId || undefined;
+    creator = creator || sess?.id || undefined;
+  } catch (e) {}
+
+  try {
+    const personPayload: Record<string, any> = {
       id: person.id,
-      family_id: familyId || null,
       first_name: person.name,
       last_name: person.surname || null,
-      name: person.name, // orqaga moslik uchun
+      name: person.name,
       gender: person.gender,
       parent_id: person.parentId || null,
       birth_date: person.birthDate || null,
@@ -426,8 +436,12 @@ export async function syncPersonToSupabase(
       notes: person.notes || null,
       biography: person.notes || null,
       linked_user_id: person.linkedUserId || null,
-      created_by: userId || null,
     };
+
+    // Muhim: family_id va created_by faqat qiymat bo'lsa yuboriladi.
+    // Aks holda mavjud shaxsni tahrirlashda oila bog'lanishi NULL bo'lib qoladi.
+    if (fam) personPayload.family_id = fam;
+    if (creator) personPayload.created_by = creator;
 
     const res = await fetch(`${url}/rest/v1/persons`, {
       method: 'POST',
@@ -438,8 +452,12 @@ export async function syncPersonToSupabase(
       body: JSON.stringify(personPayload),
     });
 
-    // Agar otasi/onasi ko'rsatilgan bo'lsa, relationships jadvalini ham yangilaymiz
-    if (person.parentId) {
+    if (!res.ok) {
+      console.warn('[persons] saqlash xatosi:', await res.text());
+    }
+
+    // Ota-ona bog'lanishi (oila ID bo'lsagina)
+    if (person.parentId && fam) {
       await fetch(`${url}/rest/v1/relationships`, {
         method: 'POST',
         headers: {
@@ -447,9 +465,9 @@ export async function syncPersonToSupabase(
           Prefer: 'resolution=merge-duplicates',
         },
         body: JSON.stringify({
-          family_id: familyId || null,
-          person_id: person.parentId, // ota
-          related_person_id: person.id, // farzand
+          family_id: fam,
+          person_id: person.parentId,
+          related_person_id: person.id,
           person1_id: person.parentId,
           person2_id: person.id,
           relation_type: 'child',
@@ -459,7 +477,7 @@ export async function syncPersonToSupabase(
 
     return res.ok;
   } catch (e) {
-    console.warn("Sync person to Supabase warning:", e);
+    console.warn('Sync person to Supabase warning:', e);
     return false;
   }
 }
