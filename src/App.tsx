@@ -51,7 +51,8 @@ import {
   Sparkles,
   Info,
   Bot,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 
 export default function App() {
@@ -71,6 +72,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // URL query params for Invite links
   const [inviteCodeFromUrl, setInviteCodeFromUrl] = useState<string | null>(null);
