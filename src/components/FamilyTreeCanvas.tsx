@@ -350,7 +350,34 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
   // Kesh qilingan kartochkalar boshlang'ich o'lchamlari (Zoom va Drag paytida 120 FPS ta'minlash uchun)
   const cardBasePositionsRef = useRef<Record<string, CardBox>>({});
+    // Zoom holatini hodisa ichida doim yangi qiymatda ko'rish uchun
+  const zoomRef = useRef<number>(0.60);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
+  // G'ildirak (wheel) hodisasini passive emas holatda ulaymiz
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 1.07 : 0.93;
+      const newZoom = Math.min(Math.max(zoomRef.current * factor, 0.10), 2.5);
+      const ratio = newZoom / zoomRef.current;
+      const originX = e.clientX - rect.left;
+      const originY = e.clientY - rect.top;
+      zoomRef.current = newZoom;
+      setPan((prev) => ({
+        x: originX - (originX - prev.x) * ratio,
+        y: originY - (originY - prev.y) * ratio,
+      }));
+      setZoom(newZoom);
+    };
+    el.addEventListener('wheel', onWheelNative, { passive: false });
+    return () => el.removeEventListener('wheel', onWheelNative);
+  }, []);
   const isOwner = !currentUser || currentUser.role === 'owner' || currentUser.isGuest;
 
   const getOffsetStyle = (id: string): React.CSSProperties => {
@@ -548,6 +575,7 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
   };
 
   // Mouse wheel zoom relative to cursor position
+    // Mouse wheel zoom relative to cursor position
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.07 : 0.93;
@@ -612,7 +640,6 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (touchState.current.isPinching && e.touches.length === 2) {
-      e.preventDefault();
       const t1 = e.touches[0];
       const t2 = e.touches[1];
       const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
@@ -1252,7 +1279,6 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       ref={containerRef}
       id="family-tree-canvas-viewport"
       className="relative w-full h-full min-h-0 flex-1 overflow-hidden select-none cursor-grab active:cursor-grabbing border border-slate-200/80 dark:border-slate-800/80 rounded-2xl shadow-inner touch-none"
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
