@@ -36,7 +36,7 @@ import { AddRelativeModal, RelativeRelationType } from './components/AddRelative
 import { ThemeMode, getInitialTheme, applyTheme } from './utils/theme';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
-import { syncPersonToSupabase, fetchInviteFromSupabase, loadFamilyDataFromSupabase } from './utils/supabaseDb';
+import { syncPersonToSupabase, syncAllPeopleToSupabase, fetchInviteFromSupabase, loadFamilyDataFromSupabase } from './utils/supabaseDb';
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightSidebar } from './components/RightSidebar';
 import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
@@ -633,7 +633,8 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
     });
 
     // Supabase bilan real sinxronlashtirish
-    syncPersonToSupabase(person).catch(() => {});
+    const nextPeople = { ...state.people, [person.id]: person };
+    syncAllPeopleToSupabase(nextPeople, state.currentUser?.familyId || '').catch(() => {});
 
     // Audit log / Shajara tarixiga yozish
     addHistoryRecord({
@@ -674,9 +675,9 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
       };
     });
 
-    syncPersonToSupabase(newPerson).catch(() => {});
-    if (relatedPerson) {
-      syncPersonToSupabase(relatedPerson).catch(() => {});
+    const nextPeople = { ...state.people, [newPerson.id]: newPerson };
+    if (relatedPerson) nextPeople[relatedPerson.id] = relatedPerson;
+    syncAllPeopleToSupabase(nextPeople, state.currentUser?.familyId || '').catch(() => {});
     }
 
     addHistoryRecord({
