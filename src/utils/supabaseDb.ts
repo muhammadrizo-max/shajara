@@ -400,17 +400,20 @@ export async function fetchInviteFromSupabase(token: string): Promise<SupabaseIn
 // Baza sxemasi:
 // persons: id, family_id, first_name, last_name, gender, parent_id, birth_date, is_living, photo_url, notes, linked_user_id
 // ---------------------------------------------------------------------------
+const isUuid = (s?: string | null): boolean =>
+  !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 export async function syncPersonToSupabase(
   person: Person,
   familyId?: string,
   userId?: string
 ): Promise<boolean> {
   if (!isSupabaseConfigured()) return false;
+  // Faqat UUID ko'rinishidagi shaxslar bazaga yoziladi
+  if (!isUuid(person.id)) return false;
 
   const { url } = getSupabaseCredentials();
 
-  // Oila va foydalanuvchi ID sini aniqlaymiz.
-  // Chaqiruvchi bermagan bo'lsa, joriy sessiyadan olamiz.
   let fam: string | undefined = familyId;
   let creator: string | undefined = userId;
   try {
@@ -420,6 +423,9 @@ export async function syncPersonToSupabase(
     creator = creator || sess?.id || undefined;
   } catch (e) {}
 
+  // Ota faqat UUID bo'lsagina bog'lanadi
+  const parentId = isUuid(person.parentId) ? person.parentId! : null;
+
   try {
     const personPayload: Record<string, any> = {
       id: person.id,
@@ -427,7 +433,7 @@ export async function syncPersonToSupabase(
       last_name: person.surname || null,
       name: person.name,
       gender: person.gender,
-      parent_id: person.parentId || null,
+      parent_id: parentId,
       birth_date: person.birthDate || null,
       birth_year: person.birthYear || null,
       death_year: person.deathYear || null,
@@ -437,47 +443,56 @@ export async function syncPersonToSupabase(
       biography: person.notes || null,
       linked_user_id: person.linkedUserId || null,
     };
-
-    // Muhim: family_id va created_by faqat qiymat bo'lsa yuboriladi.
-    // Aks holda mavjud shaxsni tahrirlashda oila bog'lanishi NULL bo'lib qoladi.
     if (fam) personPayload.family_id = fam;
     if (creator) personPayload.created_by = creator;
 
     const res = await fetch(`${url}/rest/v1/persons`, {
       method: 'POST',
-      headers: {
-        ...headers(),
-        Prefer: 'resolution=merge-duplicates',
-      },
+      headers: { ...headers(), Prefer: 'resolution=merge-duplicates' },
       body: JSON.stringify(personPayload),
     });
-
     if (!res.ok) {
       console.warn('[persons] saqlash xatosi:', await res.text());
+      return false;
     }
 
-    // Ota-ona bog'lanishi (oila ID bo'lsagina)
-    if (person.parentId && fam) {
+    if (parentId && fam) {
       await fetch(`${url}/rest/v1/relationships`, {
         method: 'POST',
-        headers: {
-          ...headers(),
-          Prefer: 'resolution=merge-duplicates',
-        },
+        headers: { ...headers(), Prefer: 'resolution=merge-duplicates' },
         body: JSON.stringify({
           family_id: fam,
-          person_id: person.parentId,
+          person_id: parentId,
           related_person_id: person.id,
-          person1_id: person.parentId,
+          person1_id: parentId,
           person2_id: person.id,
           relation_type: 'child',
         }),
       }).catch(() => {});
     }
-
-    return res.ok;
+    return true;
   } catch (e) {
     console.warn('Sync person to Supabase warning:', e);
     return false;
   }
+}
+
+// Barcha shaxslarni avlod bo'yicha tartib bilan yuborish (ota-ona avval)
+export async function syncAllPeopleToSupabase(
+  people: Record<string, Person>,
+  familyId: string
+): Promise<{ ok: number; failed: number }> {
+  if (!isSupabaseConfigured() || !familyId) return { ok: 0, failed: 0 };
+  const list = (Object.values(people) as Person[])
+    .filter((p) => isUuid(p.id))
+    .sort((a, b) => (a.generation || 1) - (b.generation || 1));
+
+  let ok = 0;
+  let failed = 0;
+  for (const p of list) {
+    const done = await syncPersonToSupabase(p, familyId);
+    if (done) ok++;
+    else failed++;
+  }
+  return { ok, failed };
 }
