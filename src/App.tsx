@@ -264,30 +264,34 @@ export default function App() {
     }
   }, [state]);
 
-  // Telefon va Kompyuter o'rtasida shajarani avtomatik sinxronlash (Cross-device Cloud Sync)
+    // Ilova ochilganda bulutdan yangi ma'lumotni olish
   useEffect(() => {
-    const session = getCurrentSessionUser();
-    if (session?.id || session?.email) {
-      fetchTreeFromCloud(session.id, session.email).then((cloudTree) => {
-        if (cloudTree && cloudTree.people && Object.keys(cloudTree.people).length > 0) {
-          setState((prev) => {
-            const currentCount = Object.keys(prev.people).length;
-            const cloudCount = Object.keys(cloudTree.people).length;
-            // Agar serverda ko'proq a'zo bo'lsa (boshqa qurilmadan kiritilgan)
-            if (cloudCount > currentCount || currentCount <= 1) {
-              saveFamilyTreeState(cloudTree, session.id);
-              return {
-                ...prev,
-                ...cloudTree,
-                currentUser: prev.currentUser || session,
-              };
-            }
-            return prev;
-          });
-        }
-      }).catch((e) => console.warn('[Cloud Sync] startup fetch xatolik:', e));
+    if (state.currentUser?.familyId) {
+      refreshFromCloud(true);
     }
-  }, []);
+  }, [state.currentUser?.familyId]);
+
+  // Avtomatik yangilash: har 60 soniyada va oynaga qaytilganda
+  useEffect(() => {
+    if (!state.currentUser?.familyId) return;
+
+    const tick = () => {
+      if (document.hidden) return;
+      if (isEditModalOpen || isLoginModalOpen) return;
+      refreshFromCloud(true);
+    };
+
+    const interval = window.setInterval(tick, 60_000);
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [state.currentUser?.familyId, isEditModalOpen, isLoginModalOpen]);
 
   // Hydrate video & media URLs from IndexedDB on startup
   useEffect(() => {
@@ -326,6 +330,42 @@ export default function App() {
   const showToast = (text: string, type: 'success' | 'warn' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3800);
+  };
+    // Bulutdan (persons jadvalidan) to'liq yangilash
+  const refreshFromCloud = async (silent: boolean = false) => {
+    const familyId = state.currentUser?.familyId;
+    if (!familyId) {
+      if (!silent) showToast("Oila aniqlanmadi. Iltimos, qayta kiring.", 'warn');
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      const res = await loadFamilyDataFromSupabase(familyId);
+      if (res.success && res.people && Object.keys(res.people).length > 0) {
+        const cloudPeople = res.people;
+        setState((prev) => {
+          const myPersonId = prev.currentUser?.personId;
+          return {
+            ...prev,
+            people: cloudPeople,
+            rootId: res.rootId || prev.rootId,
+            meId: myPersonId && cloudPeople[myPersonId]
+              ? myPersonId
+              : (res.meId || prev.meId),
+          };
+        });
+        setLastSyncedAt(new Date());
+        if (!silent) showToast("Shajara bulutdan yangilandi ✅", 'success');
+      } else if (!silent) {
+        showToast("Bulutda ma'lumot topilmadi.", 'warn');
+      }
+    } catch (err) {
+      console.warn('[Refresh] xatolik:', err);
+      if (!silent) showToast("Yangilashda xatolik. Internetni tekshiring.", 'warn');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleUnauthorizedEditAttempt = (customMsg?: string) => {
@@ -1232,6 +1272,20 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
           </span>
         </button>
       </div>
+            {/* Qo'lda yangilash tugmasi */}
+      {state.currentUser?.familyId && (
+        <button
+          onClick={() => refreshFromCloud(false)}
+          disabled={isRefreshing}
+          title={lastSyncedAt
+            ? `Oxirgi yangilanish: ${lastSyncedAt.toLocaleTimeString()}`
+            : "Bulutdan yangilash"}
+          aria-label="Yangilash"
+          className="fixed bottom-36 right-4 sm:bottom-20 sm:right-6 z-40 w-11 h-11 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg flex items-center justify-center text-emerald-600 dark:text-emerald-400 hover:scale-110 active:scale-95 transition disabled:opacity-60"
+        >
+          <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
+      )}
     </div>
   );
 }
