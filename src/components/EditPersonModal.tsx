@@ -302,7 +302,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       ? people[newFatherGrandparentId].generation + 1
       : 1;
 
-    const newFatherId = `p_${Date.now()}_father`;
+    const newFatherId = crypto.randomUUID();
     const newFather: Person = {
       id: newFatherId,
       name: newFatherName.trim(),
@@ -340,7 +340,7 @@ export const EditPersonModal: React.FC<EditPersonModalProps> = ({
       : birthDate ? birthDate.split('-')[0] : (birthYear.trim() || undefined);
 
     const updatedPerson: Person = {
-      id: personToEdit?.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: personToEdit?.id || crypto.randomUUID(),
       name: name.trim(),
       surname: surname.trim() || undefined,
       gender,
