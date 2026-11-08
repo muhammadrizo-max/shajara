@@ -678,7 +678,6 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
     const nextPeople = { ...state.people, [newPerson.id]: newPerson };
     if (relatedPerson) nextPeople[relatedPerson.id] = relatedPerson;
     syncAllPeopleToSupabase(nextPeople, state.currentUser?.familyId || '').catch(() => {});
-    }
 
     addHistoryRecord({
       action: isNew ? 'person_add' : 'person_edit',
