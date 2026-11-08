@@ -36,7 +36,7 @@ import { AddRelativeModal, RelativeRelationType } from './components/AddRelative
 import { ThemeMode, getInitialTheme, applyTheme } from './utils/theme';
 import { initTelegramWebApp, waitForTelegramUser} from './utils/telegramAuth';
 import { findRootAncestorId, recalculateAllGenerations } from './utils/kinship';
-import { syncPersonToSupabase, syncAllPeopleToSupabase, fetchInviteFromSupabase, loadFamilyDataFromSupabase } from './utils/supabaseDb';
+import { syncPersonToSupabase, syncAllPeopleToSupabase, deletePersonFromSupabase, fetchInviteFromSupabase, loadFamilyDataFromSupabase } from './utils/supabaseDb';
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightSidebar } from './components/RightSidebar';
 import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
@@ -752,6 +752,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
       saveFamilyTreeState(newState, prev.currentUser?.id);
       return newState;
     });
+      deletePersonFromSupabase(personId).catch(() => {});
 
     // Audit log
     addHistoryRecord({
