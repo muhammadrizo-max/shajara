@@ -1,5 +1,5 @@
 import React, { useRef, useState, useMemo } from 'react';
-import { Person } from '../types';
+import { AuthUser, Person } from '../types';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -19,7 +19,8 @@ import {
   Maximize2,
   Heart,
   LayoutGrid,
-  GitFork
+  GitFork,
+  ChevronDown
 } from 'lucide-react';
 import { calculateKinship, getChildren } from '../utils/kinship';
 
@@ -29,6 +30,7 @@ interface PrintTreeModalProps {
   people: Record<string, Person>;
   rootId: string;
   meId: string;
+  currentUser?: AuthUser | null;
   treeTitle?: string;
 }
 
@@ -38,6 +40,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
   people,
   rootId,
   meId,
+  currentUser,
   treeTitle = "7 Ajdod Shajarasi — Nasabnoma"
 }) => {
   // Ko'rinish turi: 1) Rasmiy Nasabnoma Sertifikati (Generations)  2) Grafik Shajara Daraxti (Visual Tree)
@@ -46,6 +49,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
   const [includeDates, setIncludeDates] = useState<boolean>(true);
   const [themeStyle, setThemeStyle] = useState<'classic-gold' | 'emerald' | 'monochrome'>('classic-gold');
   const [isExporting, setIsExporting] = useState<string | null>(null);
+  const [isDownloadDropdownOpen, setIsDownloadDropdownOpen] = useState<boolean>(false);
   const [previewZoom, setPreviewZoom] = useState<number>(1);
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +58,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
   const peopleList = Object.values(people) as Person[];
   const rootPerson = people[rootId] || peopleList[0];
   const me = people[meId];
+  const ownerDisplayName = currentUser?.fullName || (currentUser?.name ? `${currentUser.name} ${currentUser.surname || ''}`.trim() : (me?.name ? `${me.name} ${me.surname || ''}`.trim() : (rootPerson?.name ? `${rootPerson.name} ${rootPerson.surname || ''}`.trim() : "Oila Boshlig'i")));
 
   // Avlodlar bo'yicha guruhlash (Generations)
   const generationsMap: Record<number, Person[]> = {};
@@ -439,68 +444,106 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
             </button>
           </div>
 
-          {/* Rasmlar bilan */}
-          <button
-            type="button"
-            onClick={() => setIncludePhotos(!includePhotos)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
-              includePhotos 
-                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600' 
-                : 'bg-slate-800 text-slate-400 border-slate-700'
-            }`}
-          >
-            <Check className={`w-3.5 h-3.5 ${includePhotos ? 'opacity-100' : 'opacity-0'}`} />
+          {/* Rasmlar bilan (ixcham checkbox) */}
+          <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includePhotos}
+              onChange={(e) => setIncludePhotos(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-700 border-slate-600"
+            />
             <span>Rasmlar</span>
-          </button>
+          </label>
 
           {/* Action Download Buttons */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {/* 1. Chop etish */}
             <button
               type="button"
               onClick={handlePrint}
               id="btn-trigger-print"
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <Printer className="w-3.5 h-3.5 text-amber-400" />
               <span>Chop etish</span>
             </button>
 
-            {/* 2. PNG */}
-            <button
-              type="button"
-              onClick={() => handleExportImage('png')}
-              disabled={isExporting !== null}
-              id="btn-download-png"
-              className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {isExporting === 'png' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
-              <span>PNG yuklash</span>
-            </button>
+            {/* 2. Birlashtirilgan Yuklab Olish Dropdown Tugmasi (PDF, PNG, JPG) */}
+            <div className="relative">
+              <button
+                type="button"
+                id="btn-download-dropdown-toggle"
+                onClick={() => setIsDownloadDropdownOpen(prev => !prev)}
+                disabled={isExporting !== null}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>Yuklab olish</span>
+                <ChevronDown className="w-3 h-3 text-emerald-200" />
+              </button>
 
-            {/* 3. JPG */}
-            <button
-              type="button"
-              onClick={() => handleExportImage('jpeg')}
-              disabled={isExporting !== null}
-              id="btn-download-jpg"
-              className="px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-600 active:scale-95 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {isExporting === 'jpeg' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-              <span>JPG yuklash</span>
-            </button>
+              {isDownloadDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-30" 
+                    onClick={() => setIsDownloadDropdownOpen(false)} 
+                  />
+                  <div className="absolute right-0 top-full mt-1.5 w-56 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-1.5 z-40 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                    <button
+                      type="button"
+                      id="btn-save-pdf"
+                      onClick={() => {
+                        setIsDownloadDropdownOpen(false);
+                        handleSavePdf();
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-white hover:bg-amber-600/30 flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                      <div>
+                        <div>PDF hujjat (A4 Landscape)</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Chop etishga mos rasmiy format</div>
+                      </div>
+                    </button>
 
-            {/* 4. Real PDF Download */}
-            <button
-              type="button"
-              onClick={handleSavePdf}
-              disabled={isExporting !== null}
-              id="btn-save-pdf"
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:scale-95 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {isExporting === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-              <span>PDF yuklab olish</span>
-            </button>
+                    <button
+                      type="button"
+                      id="btn-download-png"
+                      onClick={() => {
+                        setIsDownloadDropdownOpen(false);
+                        handleExportImage('png');
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-white hover:bg-emerald-600/30 flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <div>PNG rasm</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Tiniq va yuqori aniqlik</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="btn-download-jpg"
+                      onClick={() => {
+                        setIsDownloadDropdownOpen(false);
+                        handleExportImage('jpeg');
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-white hover:bg-teal-600/30 flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-teal-400 shrink-0" />
+                      <div>
+                        <div>JPG rasm</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Ixcham va mobil mos</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Close button */}
@@ -532,16 +575,17 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
               backgroundImage: 'radial-gradient(circle at 50% 50%, rgba(245, 239, 230, 0.8) 0%, rgba(250, 248, 245, 1) 100%)',
             }}
           >
-            {/* Tiniq suv belgisi / Watermark (Opacity 22% qilib tiniqlashtirildi) */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.20] select-none z-0">
-              <div className="transform -rotate-12 flex flex-col items-center">
-                <img
-                  src="/assets/aistudio/file_00000000699481f4bf9593e1e840b793_190c7202.png"
-                  alt="Watermark"
-                  className="w-[420px] h-[420px] object-contain drop-shadow-sm"
-                />
-                <span className="text-3xl sm:text-4xl font-serif font-black tracking-widest text-amber-950/80 mt-4">
-                  ShajaraChi.uz • NASABNOMA
+            {/* 3-rasm: Sertifikat orqa foni (naqshli shajara va me'moriy manzara) */}
+            <div className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden rounded-3xl">
+              <img
+                src="/assets/aistudio/Gemini_Generated_Image_2bxpfv2bxpfv2bxp_9e6d0574.png"
+                alt="Sertifikat fon bezagi"
+                className="w-full h-full object-cover opacity-[0.38] mix-blend-multiply"
+              />
+              {/* Ustidan 'shajarachi.uz' yozuvi */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-4xl sm:text-6xl font-serif font-black tracking-[0.25em] text-amber-950/20 uppercase transform -rotate-12 select-none">
+                  shajarachi.uz
                 </span>
               </div>
             </div>
@@ -700,27 +744,27 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
             <div className="relative z-10 mt-10 pt-6 border-t-2 border-amber-900/40 flex items-end justify-between text-xs text-slate-600">
               <div>
                 <div className="font-bold text-slate-900 text-sm">Shajara egasi:</div>
-                <div className="text-xs text-slate-800 font-semibold mt-0.5">
-                  {me ? `${me.name} ${me.surname || ''}` : `${rootPerson?.name} ${rootPerson?.surname || ''}`}
+                <div className="text-xs text-slate-800 font-bold mt-0.5">
+                  {ownerDisplayName}
                 </div>
                 <div className="text-[9px] text-slate-500 mt-1">
                   Ushbu shajara «Shajarachi.uz» milliy tizimi orqali shakllantirildi va tasdiqlandi.
                 </div>
               </div>
 
-              {/* Rasmiy Muhr (Tiniq va aniq ko'k pechat) */}
+              {/* Rasmiy Muhr (Tiniq va qog'oz bilan qorishgan ko'k pechat) */}
               <div className="flex items-center gap-6">
                 <div className="text-center">
                   <div className="w-28 border-b-2 border-slate-500 mb-1" />
                   <span className="text-[9px] text-slate-600 font-bold uppercase tracking-wider">Shaxsiy Imzo</span>
                 </div>
                 
-                {/* 2-rasmdagi Haqiqiy ko'k dumaloq rasmiy muhr (aniqlashtirilgan) */}
+                {/* 4-rasmdagi Haqiqiy ko'k dumaloq rasmiy muhr (shaffof va qog'oz bilan to'liq qorishgan) */}
                 <div className="flex flex-col items-center">
                   <img
-                    src="/assets/aistudio/file_00000000699481f4bf9593e1e840b793_190c7202.png"
+                    src="/assets/aistudio/shajarachi_muhr_transparent.png"
                     alt="NASABNOMA - Oila Shajarasi - ShajaraChi.uz Rasmiy Muhri"
-                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-md contrast-125 saturate-110 transform rotate-[-4deg]"
+                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain mix-blend-multiply contrast-125 saturate-110 transform rotate-[-4deg]"
                   />
                 </div>
               </div>

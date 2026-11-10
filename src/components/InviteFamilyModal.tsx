@@ -100,7 +100,7 @@ export const InviteFamilyModal: React.FC<InviteFamilyModalProps> = ({
   const generateInviteUrl = (code: string, personId?: string) => {
     const params = new URLSearchParams();
     params.set('token', code);
-    params.set('mode', 'guest');
+    params.set('invite', code);
     if (personId) params.set('personId', personId);
     return `${currentUrl}?${params.toString()}`;
   };

@@ -130,13 +130,13 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
   };
 
   const SEVEN_ANCESTORS = [
-    { level: 7, title: 'Katta qat bobo (Chovov)', badge: '7-ajdod', role: 'Nasl poydevori' },
-    { level: 6, title: 'Qat bobo (Kovov)', badge: '6-ajdod', role: 'Sulola tayanchi' },
-    { level: 5, title: 'Bobokalon (Katta bobo)', badge: '5-ajdod', role: 'Urug\' boshi' },
-    { level: 4, title: 'Katta bobo', badge: '4-ajdod', role: 'Meros asoschisi' },
-    { level: 3, title: 'Bobo (Oqsoqol)', badge: '3-ajdod', role: 'Xonadon nuri' },
-    { level: 2, title: 'Ota', badge: '2-ajdod', role: 'Oila qo\'rg\'oni' },
-    { level: 1, title: 'O\'zingiz (Avlod)', badge: 'Markaziy shaxs', role: 'Meros davomchisi' },
+    { level: 7, title: "Ulug' ajdod", badge: '7-ajdod', role: 'Nasl poydevori' },
+    { level: 6, title: 'Ajdod', badge: '6-ajdod', role: 'Sulola tayanchi' },
+    { level: 5, title: 'Boboajdod (Tabarruk bobo)', badge: '5-ajdod', role: 'Urug\' boshi' },
+    { level: 4, title: 'Bobokalon', badge: '4-ajdod', role: 'Meros asoschisi' },
+    { level: 3, title: 'Katta bobo', badge: '3-ajdod', role: 'Xonadon nuri' },
+    { level: 2, title: 'Bobo', badge: '2-ajdod', role: 'Hikmat chirog\'i' },
+    { level: 1, title: 'Ota', badge: '1-ajdod', role: 'Oila qo\'rg\'oni' },
   ];
 
   const NAV_ITEMS: { key: SectionKey; label: string; targetId: string }[] = [

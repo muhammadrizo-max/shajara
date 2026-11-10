@@ -210,31 +210,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
 
-              {/* Telegram Bot */}
-              <button
-                id="btn-sidebar-tg-bot"
-                onClick={() => {
-                  onClose();
-                  onOpenTelegramBotModal();
-                }}
-                className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-[#24A1DE]/10 border border-[#24A1DE]/30 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#24A1DE]/10 text-[#24A1DE] flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Bot className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white">
-                      Telegram Bot (@shajarachi_bot)
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Bot orqali ma'lumot kiritish va sinxronlash
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
               {/* Statistika */}
               <button
                 id="btn-sidebar-stats"

@@ -15,7 +15,8 @@ import {
   HelpCircle,
   FileText,
   Info,
-  Edit3
+  Edit3,
+  ShieldCheck
 } from 'lucide-react';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
 import { Person, ViewMode } from '../types';
@@ -36,6 +37,7 @@ interface LeftSidebarProps {
   onExport: () => void;
   onImport: (file: File) => void;
   onReset: () => void;
+  onOpenSecurityModal?: () => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -54,6 +56,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onExport,
   onImport,
   onReset,
+  onOpenSecurityModal,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -306,39 +309,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               </div>
             </div>
 
-            {/* Zaxira & Fayllar (JSON Export / Import) */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
-                Zaxira & Fayllar
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    onExport();
-                    onClose();
-                  }}
-                  className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5 text-slate-500" />
-                  <span>JSON Eksport</span>
-                </button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <Upload className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>JSON Import</span>
-                </button>
-              </div>
+            {/* Zaxira & Xavfsizlik (Xavfsizlik Markaziga bog'langan) */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                id="btn-sidebar-backup-security"
+                onClick={() => {
+                  onClose();
+                  onOpenSecurityModal?.();
+                }}
+                className="w-full p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 text-xs font-semibold flex items-center justify-between text-slate-800 dark:text-slate-200 transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white">Zaxira Nusxalar & 2FA</div>
+                    <div className="text-[10px] text-slate-400">Xavfsizlik Markazida boshqarish</div>
+                  </div>
+                </div>
+                <span className="text-[10px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">Ochish →</span>
+              </button>
             </div>
 
             {/* 7 Ajdod qoidasi haqida ma'lumot */}
@@ -347,7 +338,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
                 <span>7 Ajdod an'anasi:</span>
               </div>
-              O'g'il va qiz farzandlar o'zlarining 7 pusht ota-bobolarini (Katta qat bobo, Qat bobo, Bobokalon, Katta bobo, Bobo, Ota, O'zi) bilishi o'zbek oilaviy merosining eng muhim asoslaridan biridir.
+              O'g'il va qiz farzandlar o'zlarining 7 pusht ota-bobolarini (Ulug' ajdod, Ajdod, Boboajdod, Bobokalon, Katta bobo, Bobo, Ota) bilishi o'zbek oilaviy merosining eng muhim asoslaridir.
             </div>
 
             {/* Shajarani tozalash */}

@@ -26,7 +26,6 @@ import {
   BackupSnapshot,
   saveAutoBackupSnapshot
 } from '../utils/security';
-import { getHistoryRecords } from '../utils/historyStorage';
 
 interface SecurityCenterModalProps {
   isOpen: boolean;
@@ -45,7 +44,7 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
   onRestoreBackup,
   showToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'status' | '2fa' | 'backups' | 'audit'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | '2fa' | 'backups'>('status');
 
   // 2FA State
   const [twoFactorConfig, setTwoFactorState] = useState(get2FAConfig());
@@ -68,11 +67,12 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
 
   const handleEnable2FA = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^\d{6}$/.test(pinInput)) {
-      showToast("PIN kod 6 ta raqamdan iborat bo'lishi shart!", 'warn');
+    const cleanPin = pinInput.trim();
+    if (!cleanPin || cleanPin.length < 6) {
+      showToast("PIN kod kamida 6 ta belgidan iborat bo'lishi shart!", 'warn');
       return;
     }
-    if (pinInput !== confirmPinInput) {
+    if (cleanPin !== confirmPinInput.trim()) {
       showToast("Kiritilgan PIN kodlar bir-biriga mos kelmadi!", 'warn');
       return;
     }
@@ -80,7 +80,7 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
     const backupKey = generateRandom2FABackupKey();
     const newConfig = {
       isEnabled: true,
-      pinHash: simplePinHash(pinInput),
+      pinHash: simplePinHash(cleanPin),
       backupKey,
       updatedAt: Date.now(),
     };
@@ -182,8 +182,6 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
     reader.readAsText(file);
   };
 
-  const auditRecords = getHistoryRecords().slice(0, 15);
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div 
@@ -257,18 +255,6 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
           >
             <Database className="w-3.5 h-3.5" />
             <span>Zaxira Nusxa</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'audit'
-                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Audit jurnali</span>
           </button>
         </div>
 
@@ -386,129 +372,174 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
           {/* TAB 2: 2-BOSQICHLI HIMOYА (2FA / MFA) */}
           {activeTab === '2fa' && (
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                      twoFactorConfig.isEnabled 
-                        ? 'bg-emerald-500/20 text-emerald-600' 
-                        : 'bg-amber-500/20 text-amber-600'
+              {/* Birlashgan va animatsiyali yagona 2FA boshqaruv kartochkasi */}
+              <div className={`p-4 sm:p-5 rounded-2xl border-2 transition-all duration-300 shadow-md ${
+                twoFactorConfig.isEnabled
+                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-500/70 shadow-emerald-500/10'
+                  : isEditing2FA
+                  ? 'bg-white dark:bg-slate-800 border-emerald-500 ring-2 ring-emerald-500/20 shadow-emerald-500/15'
+                  : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700'
+              }`}>
+                {/* Yuqori qism: Holat va Tugma */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* Yuqori kontrastli, tiniq va yorqin ogohlantirish / himoya belgisi */}
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-md transition-all duration-300 ${
+                      twoFactorConfig.isEnabled
+                        ? 'bg-emerald-600 text-white ring-4 ring-emerald-500/20'
+                        : isEditing2FA
+                        ? 'bg-emerald-600 text-white ring-4 ring-emerald-500/20'
+                        : 'bg-amber-500 text-white ring-4 ring-amber-300/60 dark:ring-amber-500/30'
                     }`}>
-                      <Lock className="w-4 h-4" />
+                      {twoFactorConfig.isEnabled ? (
+                        <ShieldCheck className="w-5 h-5 text-white" />
+                      ) : isEditing2FA ? (
+                        <Key className="w-5 h-5 text-white" />
+                      ) : (
+                        <Lock className="w-5 h-5 text-white" strokeWidth={2.5} />
+                      )}
                     </div>
+
                     <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">
-                        2-Bosqichli Himoya (PIN Kod)
+                      <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                        <span>2-Bosqichli Himoya (PIN Kod)</span>
+                        {twoFactorConfig.isEnabled ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-extrabold shadow-xs">
+                            FAOL & HIMOYALANGAN
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-extrabold shadow-xs flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-white" />
+                            <span>O'CHIRILGAN</span>
+                          </span>
+                        )}
                       </div>
-                      <div className="text-[11px] text-slate-500">
-                        {twoFactorConfig.isEnabled ? "Yoqilgan va faol" : "O'chirilgan"}
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {twoFactorConfig.isEnabled 
+                          ? "Shajarani o'chirish va muhim amallarda 2FA kodi talab qilinadi" 
+                          : isEditing2FA 
+                          ? "Yangi PIN kodni kiriting va tasdiqlang (kamida 6 ta belgi)"
+                          : "2FA yoqilmagan. Hisobingizni ruxsatsiz kirishlardan himoyalang"}
                       </div>
                     </div>
                   </div>
 
                   {twoFactorConfig.isEnabled ? (
                     <button
+                      type="button"
                       onClick={handleDisable2FA}
-                      className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 text-xs font-bold border border-rose-200 dark:border-rose-900 hover:bg-rose-100 transition cursor-pointer"
+                      className="px-3.5 py-2 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 text-xs font-bold border border-rose-200 dark:border-rose-900 hover:bg-rose-100 transition cursor-pointer"
                     >
                       O'chirish
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => setIsEditing2FA(true)}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition cursor-pointer"
-                    >
-                      Yoqish
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  2FA yoqilganda shajarani o'chirish, butunlay tozalash va muhim xavfsizlik harakatlarida 6 xonali maxfiy PIN kod talab qilinadi.
-                </p>
-              </div>
-
-              {isEditing2FA && (
-                <form onSubmit={handleEnable2FA} className="p-4 rounded-2xl border-2 border-emerald-500/50 bg-emerald-50/20 dark:bg-emerald-950/20 space-y-3">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <Key className="w-4 h-4 text-emerald-600" />
-                    <span>Yangi 6 xonali 2FA PIN kod o'rnating</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        PIN kod (6 ta raqam):
-                      </label>
-                      <input
-                        type="password"
-                        maxLength={6}
-                        pattern="\d{6}"
-                        inputMode="numeric"
-                        value={pinInput}
-                        onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Masalan: 789456"
-                        required
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-mono tracking-widest text-center"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        PIN kodni tasdiqlang:
-                      </label>
-                      <input
-                        type="password"
-                        maxLength={6}
-                        pattern="\d{6}"
-                        inputMode="numeric"
-                        value={confirmPinInput}
-                        onChange={(e) => setConfirmPinInput(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Qayta kiriting"
-                        required
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-mono tracking-widest text-center"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2">
+                  ) : !isEditing2FA ? (
                     <button
                       type="button"
-                      onClick={() => setIsEditing2FA(false)}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300"
+                      onClick={() => setIsEditing2FA(true)}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5"
                     >
-                      Bekor qilish
+                      <span>Yoqish</span>
+                      <span className="text-xs">→</span>
                     </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md"
-                    >
-                      PIN kodni saqlash va 2FA yoqish
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {twoFactorConfig.isEnabled && twoFactorConfig.backupKey && (
-                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
-                    <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    <span>Favqulodda Tiklash Kodi (Emergency Recovery Key)</span>
-                  </div>
-                  <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                    Agar PIN kodingizni esingizdan chiqarsangiz, ushbu kod orqali tizimga kirish huquqini qayta tiklaysiz. Ushbu kodni xavfsiz joyga saqlab qo'ying!
-                  </p>
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 font-mono text-xs font-bold text-slate-900 dark:text-white">
-                    <span>{twoFactorConfig.backupKey}</span>
-                    <button
-                      onClick={handleCopyRecoveryKey}
-                      className="p-1 rounded-lg text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition flex items-center gap-1 text-[11px]"
-                    >
-                      {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedKey ? "Nusxalandi" : "Nusxalash"}</span>
-                    </button>
-                  </div>
+                  ) : null}
                 </div>
-              )}
+
+                {/* Chiroyli animatsiya bilan yagona kartochkaning o'zida ochiluvchi PIN forma */}
+                {isEditing2FA && !twoFactorConfig.isEnabled && (
+                  <form 
+                    onSubmit={handleEnable2FA} 
+                    className="mt-4 pt-4 border-t border-emerald-500/20 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200"
+                  >
+                    <div className="p-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                      <Key className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>PIN kod <strong>kamida 6 ta belgi yoki raqamdan</strong> iborat bo'lishi kerak.</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          Yangi PIN kod (kamida 6 xonali): <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          autoFocus
+                          minLength={6}
+                          value={pinInput}
+                          onChange={(e) => setPinInput(e.target.value)}
+                          placeholder="Kamida 6 xonali PIN"
+                          required
+                          className="w-full px-3 py-2.5 rounded-xl border border-emerald-400 dark:border-emerald-600 bg-white dark:bg-slate-900 text-sm font-mono tracking-widest text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          PIN kodni tasdiqlang: <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          minLength={6}
+                          value={confirmPinInput}
+                          onChange={(e) => setConfirmPinInput(e.target.value)}
+                          placeholder="Qayta kiriting"
+                          required
+                          className="w-full px-3 py-2.5 rounded-xl border border-emerald-400 dark:border-emerald-600 bg-white dark:bg-slate-900 text-sm font-mono tracking-widest text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {pinInput.length > 0 ? `${pinInput.length} ta belgi (kamida 6 ta)` : "Kamida 6 xonali maxfiy kod"}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsEditing2FA(false);
+                            setPinInput('');
+                            setConfirmPinInput('');
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                        >
+                          Bekor qilish
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={pinInput.trim().length < 6}
+                          className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>PIN kodni saqlash va 2FA yoqish</span>
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
+
+                {/* Favqulodda Tiklash Kodi (Recovery Key) */}
+                {twoFactorConfig.isEnabled && twoFactorConfig.backupKey && (
+                  <div className="mt-4 pt-4 border-t border-emerald-500/20 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span>Favqulodda Tiklash Kodi (Emergency Recovery Key)</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                      Agar PIN kodingizni esingizdan chiqarsangiz, ushbu kod orqali tizimga kirish huquqini qayta tiklaysiz. Ushbu kodni xavfsiz joyga saqlab qo'ying!
+                    </p>
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 font-mono text-xs font-bold text-slate-900 dark:text-white">
+                      <span>{twoFactorConfig.backupKey}</span>
+                      <button
+                        onClick={handleCopyRecoveryKey}
+                        className="p-1 px-2.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 hover:bg-amber-200 transition flex items-center gap-1 text-[11px] cursor-pointer"
+                      >
+                        {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedKey ? "Nusxalandi" : "Nusxalash"}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -587,45 +618,6 @@ export const SecurityCenterModal: React.FC<SecurityCenterModalProps> = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* TAB 4: AUDIT JURNALI */}
-          {activeTab === 'audit' && (
-            <div className="space-y-3">
-              <div className="text-xs text-slate-500">
-                Oxirgi muhim harakatlar va audit qaydlari:
-              </div>
-
-              {auditRecords.length === 0 ? (
-                <div className="p-4 text-center rounded-xl bg-slate-50 dark:bg-slate-800/40 text-xs text-slate-400">
-                  Hozircha audit yozuvlari mavjud emas.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {auditRecords.map((rec) => (
-                    <div
-                      key={rec.id}
-                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-800 text-xs space-y-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800 dark:text-slate-200">
-                          {rec.title}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {new Date(rec.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {rec.description}
-                      </p>
-                      <div className="text-[9px] text-slate-400 font-mono">
-                        Bajaruvchi: {rec.actorName || 'Foydalanuvchi'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>

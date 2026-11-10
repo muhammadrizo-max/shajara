@@ -6,9 +6,9 @@ export const UZBEK_ANCESTOR_TITLES: Record<number, { title: string; desc: string
   2: { title: "Bobo", desc: "2-avlod: Otangizning otasi (Katta ota)" },
   3: { title: "Katta bobo", desc: "3-avlod: Bobongizning otasi" },
   4: { title: "Bobokalon", desc: "4-avlod: Katta bobongizning otasi" },
-  5: { title: "Qat bobo", desc: "5-avlod: Bobokalongizning otasi" },
-  6: { title: "Ajdod (Bobonozir)", desc: "6-avlod: Qat bobongizning otasi" },
-  7: { title: "Ulug' ajdod (Tub bobo)", desc: "7-avlod: Shajarangizning 7-ajdodi" },
+  5: { title: "Boboajdod", desc: "5-avlod: Bobokalongizning otasi (Tabarruk bobo)" },
+  6: { title: "Ajdod", desc: "6-avlod: Boboajdodingizning otasi" },
+  7: { title: "Ulug' ajdod", desc: "7-avlod: Shajarangizning 7-ajdodi (Tub bobo)" },
 };
 
 export const UZBEK_DESCENDANT_TITLES: Record<number, { title: string; desc: string }> = {

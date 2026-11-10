@@ -14,7 +14,7 @@ import {
 import { getSupabaseCredentials } from './utils/supabaseDb';
 import { hydrateAllMediaUrls } from './utils/mediaStorage';
 import { addHistoryRecord } from './utils/historyStorage';
-import { getCurrentSessionUser, setCurrentSessionUser } from './utils/userAuthStorage';
+import { getCurrentSessionUser, setCurrentSessionUser, getFamilyInvites } from './utils/userAuthStorage';
 import { DEFAULT_ME_ID, DEFAULT_ROOT_ID, INITIAL_PEOPLE } from './data/initialData';
 import { Navbar } from './components/Navbar';
 import { FamilyTreeCanvas } from './components/FamilyTreeCanvas';
@@ -206,21 +206,21 @@ export default function App() {
       const tgStart = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
       const cleanTgStart = tgStart ? tgStart.replace('invite_', '').replace('slot_', '') : null;
 
-      // 5-band talabi: token va mode=guest
+      // Check URL parameters: ?token=<TOKEN> or ?invite= or tgWebAppStartParam
       const token = params.get('token') || params.get('invite') || cleanTgStart || params.get('start_param');
       const isGuestMode = params.get('mode') === 'guest';
       const slot = params.get('slot');
       const pId = params.get('personId');
 
-      if (isGuestMode) {
-        setViewMode('guest');
-      }
-
       if (token) {
         setInviteCodeFromUrl(token);
         if (pId) setTargetPersonFromUrl(pId);
 
+        // Taklif havolasi orqali kirilganda landing page emas, to'g'ridan-to'g'ri shajara va ro'yxatdan o'tish ochiladi!
+        setViewMode('tree');
         setIsDataLoading(true);
+
+        // 1. Supabase'dan tekshirish
         fetchInviteFromSupabase(token).then(async (inviteData) => {
           if (inviteData) {
             if (inviteData.targetPersonId) {
@@ -238,22 +238,42 @@ export default function App() {
               }
             }
 
-            if (isGuestMode) {
-              showToast("Xush kelibsiz! Shajara ko'rish rejimida ochildi. 🌳", 'success');
-            } else {
+            if (!state.currentUser) {
               setIsLoginModalOpen(true);
-              if (inviteData.slotName) {
-                showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
-              } else {
-                showToast("Shajaraga xush kelibsiz! Taklif kodi tasdiqlandi.", 'success');
-              }
             }
+            if (inviteData.slotName) {
+              showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
+            } else {
+              showToast("Shajaraga xush kelibsiz! Taklif kodi tasdiqlandi.", 'success');
+            }
+          } else {
+            // 2. Mahalliy taklifnomalar bazasidan zaxira tekshirish (Local fallback)
+            const localInvites = getFamilyInvites();
+            const localInv = localInvites.find(i => i.code?.toLowerCase() === token.toLowerCase());
+            if (localInv?.targetPersonId) {
+              setTargetPersonFromUrl(localInv.targetPersonId);
+            }
+            if (!state.currentUser) {
+              setIsLoginModalOpen(true);
+            }
+            showToast(`Taklif kodi qabul qilindi (Kod: ${token}). Ro'yxatdan o'ting.`, 'success');
           }
         }).catch((err) => {
           console.warn("Could not fetch invite_tokens data:", err);
+          const localInvites = getFamilyInvites();
+          const localInv = localInvites.find(i => i.code?.toLowerCase() === token.toLowerCase());
+          if (localInv?.targetPersonId) {
+            setTargetPersonFromUrl(localInv.targetPersonId);
+          }
+          if (!state.currentUser) {
+            setIsLoginModalOpen(true);
+          }
+          showToast(`Taklif kodi aniqlandi (${token}).`, 'success');
         }).finally(() => {
           setIsDataLoading(false);
         });
+      } else if (isGuestMode) {
+        setViewMode('guest');
       }
     } catch (e) {
       console.warn("Could not parse URL query parameters:", e);
@@ -1152,6 +1172,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
         people={state.people}
         rootId={state.rootId}
         meId={state.meId}
+        currentUser={state.currentUser}
       />
 
       {/* Shajara Tarixi / Audit Log Modal */}
@@ -1218,6 +1239,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
         onOpenAddModal={handleOpenAddRoot}
         onOpenPrintModal={() => setIsPrintModalOpen(true)}
         onOpenCalcModal={() => setIsCalcModalOpen(true)}
+        onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
         onExport={handleExport}
         onImport={handleImport}
         onReset={handleResetToDefault}
