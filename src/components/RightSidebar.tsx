@@ -39,6 +39,7 @@ interface RightSidebarProps {
   onRequestLogout: () => void;
   onEditMyProfile?: () => void;
   onOpenContactModal?: () => void;
+  onOpenSecurityModal?: () => void;
 }
 
 export const RightSidebar: React.FC<RightSidebarProps> = ({
@@ -56,6 +57,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onRequestLogout,
   onEditMyProfile,
   onOpenContactModal,
+  onOpenSecurityModal,
 }) => {
   if (!isOpen) return null;
 
@@ -281,6 +283,32 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+
+              {/* Xavfsizlik Markazi & 2FA Himoya */}
+              <button
+                id="btn-sidebar-security"
+                onClick={() => {
+                  onClose();
+                  onOpenSecurityModal?.();
+                }}
+                className="w-full p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold text-left text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-500/30 bg-emerald-500/5 transition-colors group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Xavfsizlik Markazi & 2FA</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">A+ Himoya</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      2FA, Zaxira (Backup), Audit va Himoya holati
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-emerald-500" />
               </button>
             </div>
 

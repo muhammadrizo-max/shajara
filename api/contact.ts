@@ -61,17 +61,26 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = await parseJsonBody(req);
-    const contactInfo = (body.contactInfo || body.email || body.phone || body.telegram || '').trim();
-    const message = (body.message || '').trim();
-    const timestamp = body.timestamp || new Date().toISOString();
+    const rawContact = (body.contactInfo || body.email || body.phone || body.telegram || '');
+    const rawMessage = (body.message || '');
+
+    // Server-side Input Validation & Sanitization
+    const contactInfo = String(rawContact).trim().replace(/[\x00-\x1F\x7F]/g, '').slice(0, 150);
+    const message = String(rawMessage).trim().slice(0, 3000);
+    const timestamp = new Date().toISOString();
     const settings = body.settings || {};
 
     if (!contactInfo || !message) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, error: 'Aloqa ma\'lumoti (Telegram yoki telefon) va xabar kiritilishi shart' }));
+      res.end(JSON.stringify({ success: false, error: 'Aloqa ma\'lumoti va xabar kiritilishi shart' }));
       return;
     }
+
+    // HTML Injection Oldini olish (Output Escaping)
+    const escape = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    const safeContactHtml = escape(contactInfo);
+    const safeMessageHtml = escape(message);
 
     let sentToTelegram = false;
     let sentToEmail = false;
@@ -82,7 +91,7 @@ export default async function handler(req: any, res: any) {
 
     if (botToken && adminChatId) {
       try {
-        const text = `📬 *Yangi Murojaat | Shajarachi.uz*\n\n👤 *Aloqa (Telegram / Tel):* \`${contactInfo}\`\n⏰ *Vaqt:* ${timestamp}\n\n💬 *Xabar:*\n${message}`;
+        const text = `📬 *Yangi Murojaat | Shajarachi.uz*\n\n👤 *Aloqa (Telegram / Tel):* \`${contactInfo.replace(/[`*_\\[\\]]/g, '')}\`\n⏰ *Vaqt:* ${timestamp}\n\n💬 *Xabar:*\n${message.replace(/[`*_\\[\\]]/g, '')}`;
         const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -108,10 +117,10 @@ export default async function handler(req: any, res: any) {
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
         <h2 style="color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px;">🌳 Shajarachi.uz — Yangi Murojaat</h2>
-        <p><strong>Yuboruvchi / Aloqa:</strong> ${contactInfo}</p>
+        <p><strong>Yuboruvchi / Aloqa:</strong> ${safeContactHtml}</p>
         <p><strong>Vaqt:</strong> ${timestamp}</p>
         <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #059669;">
-          <p style="margin: 0; white-space: pre-wrap; color: #1e293b;">${message}</p>
+          <p style="margin: 0; white-space: pre-wrap; color: #1e293b;">${safeMessageHtml}</p>
         </div>
         <p style="color: #64748b; font-size: 12px; margin-top: 20px;">Ushbu xabar shajarachi.uz aloqa formasi orqali ${adminEmail} manziliga yo'llandi.</p>
       </div>

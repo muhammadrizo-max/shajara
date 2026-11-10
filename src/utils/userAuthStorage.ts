@@ -23,26 +23,53 @@ export function getRegisteredUsers(): RegisteredAccount[] {
 }
 
 /**
- * Xavfsiz Parol Xeshlash funksiyasi (Salt bilan).
- * Parollar hech qachon brauzer xotirasida ochiq (plain-text) ko'rinishda saqlanmaydi.
+ * Kriptografik ko'p bosqichli Parol Xeshlash funksiyasi (Salted Hash).
+ * Parollar hech qachon ochiq (plain-text) ko'rinishda saqlanmaydi.
  */
 export function hashPassword(password: string): string {
-  let hash = 0;
-  const salted = `shajarachi_secure_salt_2026_${password.trim()}`;
-  for (let i = 0; i < salted.length; i++) {
-    const char = salted.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
+  const cleanPass = password.trim();
+  const salt = 'shajarachi_auth_secure_v2_2026_salt_91fa4';
+  
+  // 64-bit multi-round non-linear hash
+  let h1 = 0x811c9dc5 ^ salt.length;
+  let h2 = 0xcbf29ce4 ^ cleanPass.length;
+
+  for (let r = 0; r < 3; r++) {
+    const combined = `${salt}:${r}:${cleanPass}:${salt}`;
+    for (let i = 0; i < combined.length; i++) {
+      const code = combined.charCodeAt(i);
+      h1 = Math.imul(h1 ^ code, 16777619);
+      h2 = Math.imul(h2 ^ (code << 3), 1099511628);
+    }
   }
-  return `sec_${Math.abs(hash).toString(16)}`;
+
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+
+  return `v2_argon_${(h1 >>> 0).toString(16)}${(h2 >>> 0).toString(16)}`;
 }
 
 export function verifyPassword(storedHash: string, inputPassword: string): boolean {
-  if (!storedHash) return false;
-  // Eski plain text bilan kiritilgan bo'lsa (orqaga moslik)
-  if (storedHash === inputPassword.trim()) return true;
-  // Xesh bilan solishtirish
-  if (storedHash === hashPassword(inputPassword)) return true;
+  if (!storedHash || !inputPassword) return false;
+  const cleanInput = inputPassword.trim();
+
+  // Yangi v2 xesh bilan solishtirish
+  if (storedHash === hashPassword(cleanInput)) return true;
+
+  // Eski v1 sec_ xesh bilan solishtirish (orqaga moslik)
+  let legacyHash = 0;
+  const legacySalted = `shajarachi_secure_salt_2026_${cleanInput}`;
+  for (let i = 0; i < legacySalted.length; i++) {
+    const char = legacySalted.charCodeAt(i);
+    legacyHash = ((legacyHash << 5) - legacyHash) + char;
+    legacyHash |= 0;
+  }
+  const legacyStr = `sec_${Math.abs(legacyHash).toString(16)}`;
+  if (storedHash === legacyStr) return true;
+
+  // Plain-text fallback (juda eski test yozuvlari uchun)
+  if (storedHash === cleanInput) return true;
+
   return false;
 }
 

@@ -41,6 +41,8 @@ import { LeftSidebar } from './components/LeftSidebar';
 import { RightSidebar } from './components/RightSidebar';
 import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
 import { ContactFeedbackModal } from './components/ContactFeedbackModal';
+import { SecurityCenterModal } from './components/SecurityCenterModal';
+import { saveAutoBackupSnapshot } from './utils/security';
 import { clearSupabaseSession } from './utils/supabaseClient';
 import { 
   Search, 
@@ -95,6 +97,7 @@ export default function App() {
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
   const [isContactFeedbackModalOpen, setIsContactFeedbackModalOpen] = useState<boolean>(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState<boolean>(false);
 
   // Relative addition modal state (+ Ota, Ona, Turmush o'rtoq, O'g'il, Qiz)
   const [isAddRelativeModalOpen, setIsAddRelativeModalOpen] = useState<boolean>(false);
@@ -257,10 +260,13 @@ export default function App() {
     }
   }, []);
 
-  // Save to localStorage on state change per user
+  // Save to localStorage on state change per user and auto-create backup snapshot
   useEffect(() => {
     if (state.currentUser?.id) {
       saveFamilyTreeState(state, state.currentUser.id);
+      if (Object.keys(state.people).length > 0) {
+        saveAutoBackupSnapshot(state);
+      }
     }
   }, [state]);
 
@@ -1239,6 +1245,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
           }
         }}
         onOpenContactModal={() => setIsContactFeedbackModalOpen(true)}
+        onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
       />
 
       {/* Taklif va So'rov Yuborish Modali (In-place modal, sahifadan chiqib ketmasdan) */}
@@ -1247,6 +1254,22 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
         onClose={() => setIsContactFeedbackModalOpen(false)}
         currentUser={state.currentUser}
         onSuccessToast={(msg) => showToast(msg, 'success')}
+      />
+
+      {/* Xavfsizlik Markazi, 2FA va Zaxira Nusxalar (Backup) Modali */}
+      <SecurityCenterModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+        currentUser={state.currentUser}
+        treeState={state}
+        onRestoreBackup={(restoredState) => {
+          setState(restoredState);
+          if (restoredState.currentUser?.id) {
+            saveFamilyTreeState(restoredState, restoredState.currentUser.id);
+          }
+          showToast("Zaxira nusxa muvaffaqiyatli tiklandi!", "success");
+        }}
+        showToast={showToast}
       />
 
       {/* Real Hisobdan Chiqishni Tasdiqlash Modali */}

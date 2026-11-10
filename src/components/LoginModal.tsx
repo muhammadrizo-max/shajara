@@ -27,12 +27,24 @@ import {
   X, 
   UserPlus, 
   Bot,
+  ShieldCheck,
+  Key
 } from 'lucide-react';
 import { 
   signInWithGooglePopup, 
   syncGoogleUserWithBackend, 
   GoogleAuthCancelledError 
 } from '../utils/googleAuth';
+import { 
+  sanitizeInput, 
+  isValidEmail, 
+  checkPasswordStrength, 
+  get2FAConfig, 
+  verify2FAPin, 
+  getLoginAttempts, 
+  recordFailedLoginAttempt, 
+  clearLoginAttempts 
+} from '../utils/security';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -67,6 +79,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [regPassword, setRegPassword] = useState<string>('');
   const [regPersonId, setRegPersonId] = useState<string>(targetPersonId || '');
   const [agreedToTerms, setAgreedToTerms] = useState<boolean>(true);
+  const regStrength = checkPasswordStrength(regPassword);
 
   // Login state
   const [loginIdentifier, setLoginIdentifier] = useState<string>('');
@@ -92,6 +105,32 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const [error, setError] = useState<string>('');
 
+  // Xavfsizlik: Brute-force & Rate Limit holati
+  const [lockoutRemaining, setLockoutRemaining] = useState<number>(() => {
+    const attempts = getLoginAttempts();
+    return attempts.lockedUntil > Date.now() ? Math.ceil((attempts.lockedUntil - Date.now()) / 1000) : 0;
+  });
+
+  // 2FA PIN kiritish holati
+  const [requires2FA, setRequires2FA] = useState<boolean>(false);
+  const [pin2FA, setPin2FA] = useState<string>('');
+  const [pendingAuthUser, setPendingAuthUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    if (lockoutRemaining <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          clearLoginAttempts();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutRemaining]);
+
   useEffect(() => {
     if (targetPersonId) {
       setRegPersonId(targetPersonId);
@@ -103,21 +142,29 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const peopleList = Object.values(people) as Person[];
   const isTreeEmpty = peopleList.length === 0;
 
+  // Parol mustahkamligi hisobi
+  const passStrength = checkPasswordStrength(regPassword);
+
   // Ro'yxatdan o'tish (Faqat Ism-familiya, Telefon va Email majburiy)
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!regFullName.trim()) {
-      setError("Iltimos, ism va familiyangizni kiriting");
+    const cleanName = sanitizeInput(regFullName, 100);
+    const cleanEmail = sanitizeInput(regEmail, 150).toLowerCase();
+    const cleanPhone = sanitizeInput(regPhone, 30);
+    const cleanPassword = regPassword.trim();
+
+    if (!cleanName) {
+      setError("Iltimos, ism va familiyangizni to'g'ri kiriting");
       return;
     }
-    if (!regEmail.trim() || !regEmail.includes('@')) {
-      setError("Iltimos, to'g'ri email manzilini kiriting");
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
+      setError("Iltimos, haqiqiy va to'g'ri email manzilini kiriting (masalan: nom@domain.uz)");
       return;
     }
-    if (!regPassword.trim() || regPassword.trim().length < 4) {
-      setError("Iltimos, kamida 4 belgidan iborat parol kiriting");
+    if (!cleanPassword || cleanPassword.length < 6) {
+      setError("Xavfsizlik: Parol kamida 6 ta belgidan iborat bo'lishi shart!");
       return;
     }
     if (!agreedToTerms) {
@@ -126,9 +173,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
 
     const res = registerNewUser({
-      fullName: regFullName.trim(),
-      email: regEmail.trim(),
-      password: regPassword.trim(),
+      fullName: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      password: cleanPassword,
       role: isTreeEmpty ? 'owner' : 'editor',
     });
 
@@ -334,25 +382,43 @@ const handleGoogleLogin = async () => {
   }
 };
 
-  // Kirish
+  // Kirish (Brute-force himoyasi va 2FA bilan)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!loginIdentifier.trim()) {
+    if (lockoutRemaining > 0) {
+      setError(`Xavfsizlik himoyasi: Juda ko'p xato urinishlar tufayli tizim ${lockoutRemaining} soniyaga bloklandi.`);
+      return;
+    }
+
+    const cleanIdentifier = sanitizeInput(loginIdentifier, 150);
+    const cleanPassword = loginPassword.trim();
+
+    if (!cleanIdentifier) {
       setError("Email yoki telefon raqamingizni kiriting");
       return;
     }
-    if (!loginPassword) {
+    if (!cleanPassword) {
       setError("Parolingizni kiriting");
       return;
     }
 
-    const res = loginUserWithCredentials(loginIdentifier, loginPassword);
+    const res = loginUserWithCredentials(cleanIdentifier, cleanPassword);
     if (!res.success || !res.user) {
-      setError(res.error || "Kirishda xatolik yuz berdi");
+      const lockStatus = recordFailedLoginAttempt();
+      if (lockStatus.isLocked) {
+        setLockoutRemaining(lockStatus.remainingSeconds);
+        setError(`Xavfsizlik: 5 marta xato parol kiritildi! Tizim ${lockStatus.remainingSeconds} soniyaga bloklandi.`);
+      } else {
+        setError(res.error || "Login yoki parol noto'g'ri kiritildi");
+      }
       return;
     }
+
+    // Muvaffaqiyatli parol kiritildi — urinishlar tarixini tozalash
+    clearLoginAttempts();
+    setLockoutRemaining(0);
 
     const parts = res.user.fullName.split(' ');
     const authUser: AuthUser = {
@@ -369,7 +435,33 @@ const handleGoogleLogin = async () => {
       authProvider: res.user.authProvider || 'credentials',
     };
 
+    // 2-Bosqichli himoyani (2FA) tekshirish
+    const twoFactor = get2FAConfig();
+    if (twoFactor.isEnabled && twoFactor.pinHash) {
+      setPendingAuthUser(authUser);
+      setRequires2FA(true);
+      setError('');
+      return;
+    }
+
     onLogin(authUser);
+  };
+
+  // 2FA PIN kodini tasdiqlash
+  const handleVerify2FASubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const twoFactor = get2FAConfig();
+
+    if (!verify2FAPin(pin2FA, twoFactor.pinHash, twoFactor.backupKey)) {
+      setError("Noto'g'ri 2FA PIN kod yoki favqulodda tiklash kodi kiritildi!");
+      return;
+    }
+
+    if (pendingAuthUser) {
+      setRequires2FA(false);
+      onLogin(pendingAuthUser);
+    }
   };
 
   // Telegram orqali tezkor va parolsiz kirish (3-rasmdagi prompt o'rniga to'g'ridan-to'g'ri botga yo'naltirish)
@@ -554,6 +646,39 @@ const handleGoogleLogin = async () => {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {/* Parol mustahkamligi indikatori */}
+                {regPassword.length > 0 && (
+                  <div className="pt-1.5 space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500">Parol mustahkamligi:</span>
+                      <span className={`font-bold ${
+                        regStrength.score >= 4 ? 'text-emerald-600' :
+                        regStrength.score >= 3 ? 'text-blue-600' :
+                        regStrength.score >= 2 ? 'text-amber-600' : 'text-rose-600'
+                      }`}>
+                        {regStrength.label}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex gap-1">
+                      {[1, 2, 3, 4].map((step) => (
+                        <div
+                          key={step}
+                          className={`h-full flex-1 rounded-full transition-all duration-300 ${
+                            regStrength.score >= step
+                              ? regStrength.score >= 4 ? 'bg-emerald-500'
+                                : regStrength.score >= 3 ? 'bg-blue-500'
+                                : regStrength.score >= 2 ? 'bg-amber-500'
+                                : 'bg-rose-500'
+                              : 'bg-transparent'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    {regStrength.feedback && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">{regStrength.feedback}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Shartlarga rozilik checkboxi */}
@@ -598,70 +723,140 @@ const handleGoogleLogin = async () => {
             </form>
           )}
 
-          {/* TAB 2: TIZIMGA KIRISH (LOGIN) */}
+          {/* TAB 2: TIZIMGA KIRISH (LOGIN) & 2FA HIMOYA */}
           {activeTab === 'login' && (
-            <form onSubmit={handleLogin} className="space-y-3.5">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Email manzilingiz</span>
-                  <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="namuna@mail.com"
-                  value={loginIdentifier}
-                  onChange={(e) => setLoginIdentifier(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
+            requires2FA ? (
+              <form onSubmit={handleVerify2FASubmit} className="space-y-4 animate-in fade-in duration-200">
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center space-y-1.5">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                    2-Bosqichli Tasdiqlash (2FA)
+                  </h3>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                    Hisobingiz ikki bosqichli himoya bilan himoyalangan. 6 xonali PIN kodingizni yoki favqulodda tiklash kalitingizni kiriting.
+                  </p>
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Parolingiz</span>
-                  <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>2FA PIN kod yoki Favqulodda Kalit</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type="password"
                     required
-                    placeholder="Parolni kiriting"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    autoFocus
+                    placeholder="Masalan: 123456 yoki SHJ-XXXX-XXXX"
+                    value={pin2FA}
+                    onChange={(e) => setPin2FA(e.target.value)}
+                    className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm tracking-widest text-center font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
+                </div>
+
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>PIN kodni tasdiqlash va Kirish</span>
+                  </button>
+
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                    onClick={() => {
+                      setRequires2FA(false);
+                      setPin2FA('');
+                      setError('');
+                    }}
+                    className="w-full py-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    ← Boshqa hisob bilan kirish
                   </button>
                 </div>
-              </div>
+              </form>
+            ) : (
+              <form onSubmit={handleLogin} className="space-y-3.5">
+                {lockoutRemaining > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div>
+                      Haddan tashqari ko'p xato urinish! Hisob himoyasi uchun{' '}
+                      <span className="font-bold">{lockoutRemaining} soniya</span> kuting.
+                    </div>
+                  </div>
+                )}
 
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span>Tizimga kirish</span>
-                </button>
-              </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Email manzilingiz</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="namuna@mail.com"
+                    value={loginIdentifier}
+                    onChange={(e) => setLoginIdentifier(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
 
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('register')}
-                  className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold"
-                >
-                  Yangi foydalanuvchimisiz? Ro'yxatdan o'tish →
-                </button>
-              </div>
-            </form>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Parolingiz</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Parolni kiriting"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={lockoutRemaining > 0}
+                    className={`w-full py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      lockoutRemaining > 0
+                        ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white'
+                    }`}
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>{lockoutRemaining > 0 ? `Qulflangan (${lockoutRemaining}s)` : 'Tizimga kirish'}</span>
+                  </button>
+                </div>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('register')}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold"
+                  >
+                    Yangi foydalanuvchimisiz? Ro'yxatdan o'tish →
+                  </button>
+                </div>
+              </form>
+            )
           )}
 
           {/* Social Logins: Google & Telegram (Mehmon tugmasi o'rniga) */}

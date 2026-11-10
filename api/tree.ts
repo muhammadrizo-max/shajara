@@ -107,13 +107,22 @@ export default async function handler(req: any, res: any) {
   // ── GET ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     const url = new URL(req.url, 'http://localhost');
-    const userId = url.searchParams.get('userId');
-    const email  = url.searchParams.get('email');
-    if (!userId && !email) return send(400, { success: false, error: 'userId yoki email kerak' });
+    const rawUserId = url.searchParams.get('userId');
+    const rawEmail  = url.searchParams.get('email');
+    if (!rawUserId && !rawEmail) return send(400, { success: false, error: 'userId yoki email kerak' });
+
+    // Parametr tekshiruvi (SQL Injection & Path Traversal oldini olish)
+    const SAFE_ID_RE = /^[a-zA-Z0-9_\-.:@]{3,120}$/;
+    if (rawUserId && !SAFE_ID_RE.test(rawUserId)) {
+      return send(400, { success: false, error: "userId noto'g'ri formatda" });
+    }
+    if (rawEmail && !SAFE_ID_RE.test(rawEmail)) {
+      return send(400, { success: false, error: "email noto'g'ri formatda" });
+    }
 
     try {
       // Avval UUID, keyin email: prefix bilan qidirish
-      const keys = [userId, email ? `email:${email}` : null].filter(Boolean) as string[];
+      const keys = [rawUserId, rawEmail ? `email:${rawEmail}` : null].filter(Boolean) as string[];
       for (const key of keys) {
         const row = await sbGet(key);
         if (row?.tree_data && Object.keys(row.tree_data.people || {}).length > 0) {
@@ -138,6 +147,14 @@ export default async function handler(req: any, res: any) {
       }
       if (!userId && !email) {
         return send(400, { success: false, error: 'userId yoki email kerak' });
+      }
+
+      const SAFE_ID_RE = /^[a-zA-Z0-9_\-.:@]{3,120}$/;
+      if (userId && !SAFE_ID_RE.test(userId)) {
+        return send(400, { success: false, error: "userId noto'g'ri formatda" });
+      }
+      if (email && !SAFE_ID_RE.test(email)) {
+        return send(400, { success: false, error: "email noto'g'ri formatda" });
       }
 
       let saved = false;
