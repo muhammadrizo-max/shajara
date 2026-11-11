@@ -109,6 +109,13 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
         message: contactMessage.trim(),
       });
 
+      if (!res.success) {
+        setIsSent(false);
+        setSendSuccessMessage(res.message);
+        setIsSubmitting(false);
+        return;
+      }
+
       setIsSent(true);
       setSendSuccessMessage(
         res.sentToTelegram
@@ -596,7 +603,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
               <div className="pt-2 text-xs text-slate-400 space-y-1.5">
                 <div>Domen: <span className="text-emerald-400 font-bold">shajarachi.uz</span></div>
                 <div>Telegram Bot: <span className="text-[#24A1DE] font-bold">@shajarachi_bot</span></div>
-                <div>Rasmiy email: <span className="text-slate-300 font-mono">admin@shajarachi.uz</span></div>
+                <div>Rasmiy email: <span className="text-slate-300 font-mono">support@shajarachi.uz</span></div>
               </div>
             </div>
 
@@ -737,7 +744,7 @@ export const GuestLandingView: React.FC<GuestLandingViewProps> = ({
                 </li>
                 <li className="text-[11px] text-slate-400 flex items-center gap-1.5">
                   <Globe className="w-3 h-3 text-emerald-400 shrink-0" />
-                  <span>admin@shajarachi.uz</span>
+                  <span>support@shajarachi.uz</span>
                 </li>
               </ul>
             </div>
