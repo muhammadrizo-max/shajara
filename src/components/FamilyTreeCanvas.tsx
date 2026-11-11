@@ -247,50 +247,77 @@ interface KinshipLine {
   midY?: number;
 }
 
-function generateStretchyKinshipPath(
+function getDynamicParentAnchor(
+  pBox: { cx: number; cy: number; left: number; right: number; top: number; bottom: number },
+  cBox: { cx: number; cy: number; left: number; right: number; top: number; bottom: number },
+  isBotanical: boolean
+): { startX: number; startY: number } {
+  const dx = cBox.cx - pBox.cx;
+  const pWidth = pBox.right - pBox.left;
+
+  if (isBotanical) {
+    // Botanical: bolalar tepada (kichikroq Y)
+    // Agar bola ota-onaning yon tomoniga yoki pastiga tortilgan bo'lsa
+    if (cBox.cy > pBox.top + 10 && Math.abs(dx) > pWidth * 0.45) {
+      return {
+        startX: dx < 0 ? pBox.left : pBox.right,
+        startY: pBox.cy,
+      };
+    }
+    // Bola tepada: yuqori qirra bo'ylab bolaga qarab siljiydi
+    const margin = 16;
+    const startX = Math.max(pBox.left + margin, Math.min(pBox.right - margin, pBox.cx + dx * 0.35));
+    return { startX, startY: pBox.top };
+  } else {
+    // Klassik: bolalar pastda (kattaroq Y)
+    // Agar bola ota-onaning yon tomoniga yoki tepasiga tortilgan bo'lsa
+    if (cBox.cy < pBox.bottom - 10 && Math.abs(dx) > pWidth * 0.45) {
+      return {
+        startX: dx < 0 ? pBox.left : pBox.right,
+        startY: pBox.cy,
+      };
+    }
+    // Bola pastda: pastki qirra bo'ylab bolaga qarab siljiydi
+    const margin = 16;
+    const startX = Math.max(pBox.left + margin, Math.min(pBox.right - margin, pBox.cx + dx * 0.35));
+    return { startX, startY: pBox.bottom };
+  }
+}
+
+function generateSmoothFlexibleCurve(
   startX: number,
   startY: number,
   endX: number,
   endY: number,
   isBotanical: boolean,
-  cardRects: Array<{ id: string; left: number; right: number; top: number; bottom: number }>,
-  parentId: string,
-  childId: string
+  isSideDeparture = false
 ): string {
+  const dx = endX - startX;
   const dy = endY - startY;
 
-  // Vertical direction: in botanical mode child is above parent (dy < 0), in classic child is below (dy > 0)
-  const isUpward = dy < 0;
-  const absDy = Math.abs(dy);
-  const curveDist = Math.max(35, absDy * 0.45);
+  if (isSideDeparture) {
+    const sideDir = dx >= 0 ? 1 : -1;
+    const cpDistX = Math.max(25, Math.min(90, Math.abs(dx) * 0.5));
+    const cx1 = startX + sideDir * cpDistX;
+    const cy1 = startY;
 
-  let cy1 = startY + (isUpward ? -curveDist : curveDist);
-  let cy2 = endY - (isUpward ? -curveDist : curveDist);
-  let cx1 = startX;
-  let cx2 = endX;
+    const vertDir = dy >= 0 ? -1 : 1;
+    const cpDistY = Math.max(25, Math.min(90, Math.abs(dy) * 0.5));
+    const cx2 = endX;
+    const cy2 = endY + vertDir * cpDistY;
 
-  // Obstacle avoidance: if any other card sits between start and end
-  const minY = Math.min(startY, endY);
-  const maxY = Math.max(startY, endY);
-  const midX = (startX + endX) / 2;
-
-  for (const rect of cardRects) {
-    if (rect.id === parentId || rect.id === childId) continue;
-    // Check if obstacle's vertical bounds intersect the span between parent and child
-    if (rect.bottom > minY + 15 && rect.top < maxY - 15) {
-      // Check if line passes horizontally through or near the obstacle card
-      const margin = 20;
-      if (midX >= rect.left - margin && midX <= rect.right + margin) {
-        // Curve around the obstacle gracefully!
-        const cardCenter = (rect.left + rect.right) / 2;
-        const deflectDirection = midX < cardCenter ? -1 : 1;
-        const deflectDist = 85;
-        cx1 += deflectDist * deflectDirection;
-        cx2 += deflectDist * deflectDirection;
-        break;
-      }
-    }
+    return `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${cx1.toFixed(1)} ${cy1.toFixed(1)}, ${cx2.toFixed(1)} ${cy2.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
   }
+
+  // Chiroyli, elastik va tabiiy egiluvchan S-shakldagi kubik Bezye egri chizig'i
+  const absDy = Math.abs(dy);
+  const tension = Math.max(25, Math.min(140, absDy * 0.5));
+  const signY = dy >= 0 ? 1 : -1;
+
+  const cx1 = startX;
+  const cy1 = startY + signY * tension;
+  const cx2 = endX;
+  const cy2 = endY - signY * tension;
 
   return `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${cx1.toFixed(1)} ${cy1.toFixed(1)}, ${cx2.toFixed(1)} ${cy2.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
 }
@@ -906,83 +933,173 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
       // Agar ota-ona shoxi yopilgan bo'lsa, chiziqlar chizilmaydi
       if (collapsedIds.has(person.id) || (spouseId && collapsedIds.has(spouseId))) return;
 
-      let startX: number;
-      let startY: number;
-
-      if (sBox) {
-        startX = (pBox.cx + sBox.cx) / 2;
-        startY = isBotanical ? Math.min(pBox.top, sBox.top) : Math.max(pBox.bottom, sBox.bottom);
-      } else {
-        startX = pBox.cx;
-        startY = isBotanical ? pBox.top : pBox.bottom;
-      }
+      // Ota-ona qutisi (agar juftlik bo'lsa ikkala quti birlashmasi)
+      const parentBox = sBox ? {
+        cx: (pBox.cx + sBox.cx) / 2,
+        cy: (pBox.cy + sBox.cy) / 2,
+        left: Math.min(pBox.left, sBox.left),
+        right: Math.max(pBox.right, sBox.right),
+        top: Math.min(pBox.top, sBox.top),
+        bottom: Math.max(pBox.bottom, sBox.bottom),
+        width: Math.max(pBox.right, sBox.right) - Math.min(pBox.left, sBox.left),
+        height: Math.max(pBox.bottom, sBox.bottom) - Math.min(pBox.top, sBox.top),
+      } : pBox;
 
       // Bolalarning qutilarini olish
       const childBoxes = children.map((c) => ({ person: c, box: getCardBox(c.id, offsets) }));
       const validChildBoxes = childBoxes.filter((cb): cb is { person: Person; box: CardBox } => cb.box !== null);
+      if (validChildBoxes.length === 0) return;
 
-      validChildBoxes.forEach(({ person: child, box: cBox }) => {
+      // Foydalanuvchi talabi: Zoom <= 48% (~45%) va farzandlar 3tadan ko'p bo'lganda USTMA-UST
+      const isStackedLayout = zoom <= 0.48 && validChildBoxes.length > 3;
+
+      // Foydalanuvchi tomonidan surilgan (dragged) va o'z joyida turgan farzandlarni ajratish
+      const shiftedChildren = validChildBoxes.filter(({ person: c }) => {
+        const off = offsets[c.id];
+        return off && (Math.abs(off.x) >= 15 || Math.abs(off.y) >= 15);
+      });
+
+      const unshiftedChildren = validChildBoxes.filter(({ person: c }) => {
+        const off = offsets[c.id];
+        return !off || (Math.abs(off.x) < 15 && Math.abs(off.y) < 15);
+      });
+
+      // 1. Agar biror farzand kartochkasi siljitilsa, u to'g'ridan-to'g'ri ota-onaga silliq elastik egri chiziq bilan ulanadi
+      // "boshqa karta qaysi tomonga sudralsa ana shu tomonga chiziqning boshlanishi ko'chsin"
+      shiftedChildren.forEach(({ person: child, box: cBox }) => {
         const pairKey = `${person.id}-${child.id}`;
         if (processedPairs.has(pairKey)) return;
         processedPairs.add(pairKey);
 
-        // Bolalar ustma-ust taxlanganligini aniqlash (bir xil X ustunida turgan aka-uka/opa-singillar)
-        const siblingsWithSameX = validChildBoxes.filter(
-          (other) => other.person.id !== child.id && Math.abs(other.box.cx - cBox.cx) < 25
-        );
-        const isVerticallyStacked = siblingsWithSameX.length > 0;
-
-        let endX: number;
-        let endY: number;
-        let pathD: string;
-
-        if (isVerticallyStacked) {
-          // Ota-onaga eng yaqin turgan birinchi bola: to'g'ridan-to'g'ri bog'lanadi
-          const isClosestToParent = isBotanical
-            ? validChildBoxes.every((other) => other.box.cy <= cBox.cy)
-            : validChildBoxes.every((other) => other.box.cy >= cBox.cy);
-
-          if (isClosestToParent) {
-            endX = cBox.cx;
-            endY = isBotanical ? cBox.bottom : cBox.top;
-            pathD = generateStretchyKinshipPath(startX, startY, endX, endY, isBotanical, cardRects, person.id, child.id);
-          } else {
-            // 4-rasm arxitekturasi: Ustma-ust kartochkalar uchun yon tarafdan kiruvchi silliq tarmoq chiziqlari
-            if (startX >= cBox.cx - 10) {
-              // Ota-ona yoki asosiy tanasi o'ngda: kartochkaning o'ng qirrasiga kiradi
-              endX = cBox.right;
-              endY = cBox.cy;
-              const trunkX = Math.max(cBox.right + 25, Math.min(startX, cBox.right + 70));
-              pathD = `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${trunkX.toFixed(1)} ${(startY + (endY - startY) * 0.35).toFixed(1)}, ${trunkX.toFixed(1)} ${endY.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
-            } else {
-              // Ota-ona yoki asosiy tanasi chapda: kartochkaning chap qirrasiga kiradi
-              endX = cBox.left;
-              endY = cBox.cy;
-              const trunkX = Math.min(cBox.left - 25, Math.max(startX, cBox.left - 70));
-              pathD = `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${trunkX.toFixed(1)} ${(startY + (endY - startY) * 0.35).toFixed(1)}, ${trunkX.toFixed(1)} ${endY.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
-            }
-          }
-        } else {
-          // Oddiy gorizontal shajaraviy bola
-          endX = cBox.cx;
-          endY = isBotanical ? cBox.bottom : cBox.top;
-          pathD = generateStretchyKinshipPath(startX, startY, endX, endY, isBotanical, cardRects, person.id, child.id);
-        }
+        const pAnchor = getDynamicParentAnchor(parentBox, cBox, isBotanical);
+        const endX = cBox.cx;
+        const endY = isBotanical ? cBox.bottom : cBox.top;
+        const isSide = pAnchor.startX === parentBox.left || pAnchor.startX === parentBox.right;
+        const pathD = generateSmoothFlexibleCurve(pAnchor.startX, pAnchor.startY, endX, endY, isBotanical, isSide);
 
         lines.push({
           id: pairKey,
           type: 'parent-child',
           pathD,
-          startX,
-          startY,
+          startX: pAnchor.startX,
+          startY: pAnchor.startY,
           endX,
           endY,
         });
       });
+
+      // 2. O'z joyida turgan (surilmagan) farzandlar
+      if (isStackedLayout && unshiftedChildren.length > 1) {
+        // Ustma-ust tartib: klassikda yuqoridan pastga (cy o'sish tartibi), botanicalda pastdan yuqoriga
+        const sorted = [...unshiftedChildren].sort((a, b) => isBotanical ? b.box.cy - a.box.cy : a.box.cy - b.box.cy);
+
+        const minLeft = Math.min(...sorted.map((c) => c.box.left));
+        const maxRight = Math.max(...sorted.map((c) => c.box.right));
+
+        // Asosiy to'g'ri tushuvchi vertikal o'q (spineX)
+        let spineX: number;
+        let isLeftSpine: boolean;
+        if (parentBox.cx < minLeft) {
+          spineX = minLeft - 22;
+          isLeftSpine = true;
+        } else if (parentBox.cx > maxRight) {
+          spineX = maxRight + 22;
+          isLeftSpine = false;
+        } else {
+          spineX = minLeft - 22;
+          isLeftSpine = true;
+        }
+
+        const firstChild = sorted[0];
+        const lastChild = sorted[sorted.length - 1];
+
+        // Ota kartochkadan chiquvchi dinamik boshlang'ich nuqta
+        const spineVirtualBox = {
+          cx: spineX,
+          cy: (firstChild.box.cy + lastChild.box.cy) / 2,
+          left: spineX - 10,
+          right: spineX + 10,
+          top: Math.min(firstChild.box.top, lastChild.box.top),
+          bottom: Math.max(firstChild.box.bottom, lastChild.box.bottom),
+        };
+        const pAnchor = getDynamicParentAnchor(parentBox, spineVirtualBox, isBotanical);
+
+        // "ota kartochkaning past yoki yon tomonidan chiqadi va to'g'ri chiziq tushib oxirgi farzand kartasiga ulanadi"
+        const lastConnectX = isLeftSpine ? lastChild.box.left : lastChild.box.right;
+        const lastConnectY = lastChild.box.cy;
+        const turnY = isBotanical
+          ? Math.max(pAnchor.startY - 18, firstChild.box.bottom + 10)
+          : Math.min(pAnchor.startY + 18, firstChild.box.top - 10);
+        const midAnchorY = (pAnchor.startY + turnY) / 2;
+
+        const mainSpinePathD = `M ${pAnchor.startX.toFixed(1)} ${pAnchor.startY.toFixed(1)} ` +
+          `C ${pAnchor.startX.toFixed(1)} ${midAnchorY.toFixed(1)}, ${spineX.toFixed(1)} ${midAnchorY.toFixed(1)}, ${spineX.toFixed(1)} ${turnY.toFixed(1)} ` +
+          `L ${spineX.toFixed(1)} ${lastConnectY.toFixed(1)} ` +
+          `L ${lastConnectX.toFixed(1)} ${lastConnectY.toFixed(1)}`;
+
+        const lastPairKey = `${person.id}-${lastChild.person.id}`;
+        if (!processedPairs.has(lastPairKey)) {
+          processedPairs.add(lastPairKey);
+          lines.push({
+            id: lastPairKey,
+            type: 'parent-child',
+            pathD: mainSpinePathD,
+            startX: pAnchor.startX,
+            startY: pAnchor.startY,
+            endX: lastConnectX,
+            endY: lastConnectY,
+          });
+        }
+
+        // "keyin boshqa farzandlarning kartasi ana shu to'g'ri chiziqqa oddiy to'g'ri chiziq bilan ulanadi"
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const c = sorted[i];
+          const pairKey = `${person.id}-${c.person.id}`;
+          if (processedPairs.has(pairKey)) continue;
+          processedPairs.add(pairKey);
+
+          const branchConnectX = isLeftSpine ? c.box.left : c.box.right;
+          const branchPathD = `M ${spineX.toFixed(1)} ${c.box.cy.toFixed(1)} L ${branchConnectX.toFixed(1)} ${c.box.cy.toFixed(1)}`;
+
+          lines.push({
+            id: pairKey,
+            type: 'parent-child',
+            pathD: branchPathD,
+            startX: spineX,
+            startY: c.box.cy,
+            endX: branchConnectX,
+            endY: c.box.cy,
+          });
+        }
+      } else {
+        // Standart gorizontal (yonma-yon) tartib yoki yakka farzand:
+        // Har bir farzand bevosita silliq, elastik S-egri chiziq bilan ota-onaga ulanadi
+        unshiftedChildren.forEach(({ person: child, box: cBox }) => {
+          const pairKey = `${person.id}-${child.id}`;
+          if (processedPairs.has(pairKey)) return;
+          processedPairs.add(pairKey);
+
+          const pAnchor = getDynamicParentAnchor(parentBox, cBox, isBotanical);
+          const endX = cBox.cx;
+          const endY = isBotanical ? cBox.bottom : cBox.top;
+          const isSide = pAnchor.startX === parentBox.left || pAnchor.startX === parentBox.right;
+          const pathD = generateSmoothFlexibleCurve(pAnchor.startX, pAnchor.startY, endX, endY, isBotanical, isSide);
+
+          lines.push({
+            id: pairKey,
+            type: 'parent-child',
+            pathD,
+            startX: pAnchor.startX,
+            startY: pAnchor.startY,
+            endX,
+            endY,
+          });
+        });
+      }
     });
 
     setKinshipLines(lines);
-  }, [people, collapsedIds, treeOrientation, getCardBox]);
+  }, [people, collapsedIds, treeOrientation, getCardBox, zoom]);
 
   // Faqat daraxt tuzilishi o'zgarganda DOM o'lchovlarini keshga olish
   const measureBasePositions = useCallback(() => {
@@ -1233,33 +1350,17 @@ export const FamilyTreeCanvas: React.FC<FamilyTreeCanvasProps> = ({
         {/* Children Branch (Bo'yi kengaytirilgan va eni qisqartirilgan mutanosib shajara) */}
         {hasChildren && isExpanded && (
           <div className={`flex ${isBotanical ? 'flex-col-reverse' : 'flex-col'} items-center ${isBotanical ? 'mb-20 sm:mb-24' : 'mt-20 sm:mt-24'} relative w-full`}>
-            {allLeafChildren ? (
-              /* Foydalanuvchi talabi (Screenshot 4): Avlodi yo'q farzandlar bitta ustunda USTMA-UST turadi */
+            {zoom <= 0.48 && children.length > 3 ? (
+              /* Foydalanuvchi talabi: Zoom 45% atrofida (<=0.48) va 3 tadan ko'p farzandlar bo'lganda USTMA-UST */
               <div className="flex flex-col items-center gap-4 sm:gap-5 relative">
-                {leafChildren.map((child) => (
+                {children.map((child) => (
                   <div key={child.id} className="relative">
                     {renderTreeNode(child.id, level + 1)}
                   </div>
                 ))}
               </div>
-            ) : branchChildren.length > 0 && leafChildren.length > 1 ? (
-              /* Aralash: o'z oilasi/bolalari borlar gorizontal shoxlanadi, yolg'iz barglar esa bitta ustunga to'planadi */
-              <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center gap-8 sm:gap-12 relative`}>
-                {branchChildren.map((child) => (
-                  <div key={child.id} className="flex flex-col items-center relative">
-                    {renderTreeNode(child.id, level + 1)}
-                  </div>
-                ))}
-                <div className="flex flex-col items-center gap-4 sm:gap-5 relative">
-                  {leafChildren.map((child) => (
-                    <div key={child.id} className="relative">
-                      {renderTreeNode(child.id, level + 1)}
-                    </div>
-                  ))}
-                </div>
-              </div>
             ) : (
-              /* Standart gorizontal taqsimot */
+              /* Boshqa barcha paytda (zoom > 48% yoki farzandlar <= 3 ta): YONMA-YON (gorizontal) */
               <div className={`flex ${isBotanical ? 'items-end' : 'items-start'} justify-center gap-6 sm:gap-10 relative`}>
                 {children.map((child) => (
                   <div key={child.id} className="flex flex-col items-center relative">

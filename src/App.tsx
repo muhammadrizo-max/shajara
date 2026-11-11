@@ -80,6 +80,7 @@ export default function App() {
   // URL query params for Invite links
   const [inviteCodeFromUrl, setInviteCodeFromUrl] = useState<string | null>(null);
   const [targetPersonFromUrl, setTargetPersonFromUrl] = useState<string | null>(null);
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer' | null>(null);
 
   // Modals & Drawers
   const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
@@ -207,10 +208,11 @@ export default function App() {
       const cleanTgStart = tgStart ? tgStart.replace('invite_', '').replace('slot_', '') : null;
 
       // Check URL parameters: ?token=<TOKEN> or ?invite= or tgWebAppStartParam
-      const token = params.get('token') || params.get('invite') || cleanTgStart || params.get('start_param');
+      const token = params.get('token') || (params.get('invite') !== 'tree' && params.get('invite') !== 'slot' ? params.get('invite') : null) || cleanTgStart || params.get('start_param');
       const isGuestMode = params.get('mode') === 'guest';
       const slot = params.get('slot');
-      const pId = params.get('personId');
+      const pId = params.get('personId') || params.get('node');
+      const inviterParam = params.get('inviter');
 
       const roleParam = params.get('role');
       if (roleParam === 'editor' || roleParam === 'viewer') {
@@ -221,11 +223,33 @@ export default function App() {
         setInviteCodeFromUrl(token);
         if (pId) setTargetPersonFromUrl(pId);
 
-        // Taklif havolasi orqali kirilganda to'g'ridan-to'g'ri shajara daraxti ochiladi
+        // Taklif havolasi orqali kirilganda to'g'ridan-to'g'ri shajara daraxti ochiladi (login majburlanmaydi)
         setViewMode('tree');
+        setIsLoginModalOpen(false);
         setIsDataLoading(true);
 
-        // 1. Supabase'dan tekshirish
+        // 1. Eng tezkor: Serverdagi /api/tree keshidan token bo'yicha to'liq shajarani yuklash (Oq oyna bo'lmasligi uchun)
+        fetch(`/api/tree?userId=token:${encodeURIComponent(token)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((apiData) => {
+            if (apiData?.success && apiData.state?.people && Object.keys(apiData.state.people).length > 0) {
+              setState((prev) => ({
+                ...prev,
+                people: apiData.state.people,
+                rootId: apiData.state.rootId || prev.rootId,
+                meId: (pId && apiData.state.people[pId]) ? pId : (apiData.state.meId || prev.meId),
+                familyName: apiData.state.familyName || prev.familyName,
+              }));
+              if (inviterParam) {
+                showToast(`«${decodeURIComponent(inviterParam)}» sizni shajarani ko'rishga taklif qildi! 🌳`, 'success');
+              } else {
+                showToast("Shajaraga xush kelibsiz! Shajarani erkin ko'rishingiz mumkin. 🌳", 'success');
+              }
+            }
+          })
+          .catch((e) => console.warn('[Invite Fetch Tree Error]:', e));
+
+        // 2. Supabase invite_tokens va zaxira manbalardan tekshirish
         fetchInviteFromSupabase(token).then(async (inviteData) => {
           if (inviteData) {
             if (inviteData.targetPersonId) {
@@ -236,7 +260,7 @@ export default function App() {
             }
             if (inviteData.familyId) {
               const famResult = await loadFamilyDataFromSupabase(inviteData.familyId);
-              if (famResult.success && famResult.people) {
+              if (famResult.success && famResult.people && Object.keys(famResult.people).length > 0) {
                 setState((prev) => ({
                   ...prev,
                   people: famResult.people!,
@@ -246,14 +270,11 @@ export default function App() {
               }
             }
 
-            // Foydalanuvchi talabi: Havola orqali kelganda to'g'ridan-to'g'ri daraxtni ko'radi (darhol login chiqmaydi)
             if (inviteData.slotName) {
               showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
-            } else {
-              showToast("Shajaraga xush kelibsiz! Shajarani erkin ko'rishingiz mumkin.", 'success');
             }
           } else {
-            // 2. Mahalliy taklifnomalar bazasidan zaxira tekshirish (Local fallback)
+            // 3. Mahalliy taklifnomalar bazasidan zaxira tekshirish (Local fallback)
             const localInvites = getFamilyInvites();
             const localInv = localInvites.find(i => i.code?.toLowerCase() === token.toLowerCase());
             if (localInv?.targetPersonId) {
@@ -262,19 +283,9 @@ export default function App() {
             if (localInv?.role) {
               setInviteRole(localInv.role === 'editor' ? 'editor' : 'viewer');
             }
-            showToast(`Shajaraga xush kelibsiz (Taklif kodi: ${token}).`, 'success');
           }
         }).catch((err) => {
           console.warn("Could not fetch invite_tokens data:", err);
-          const localInvites = getFamilyInvites();
-          const localInv = localInvites.find(i => i.code?.toLowerCase() === token.toLowerCase());
-          if (localInv?.targetPersonId) {
-            setTargetPersonFromUrl(localInv.targetPersonId);
-          }
-          if (localInv?.role) {
-            setInviteRole(localInv.role === 'editor' ? 'editor' : 'viewer');
-          }
-          showToast(`Taklif kodi qabul qilindi (${token}).`, 'success');
         }).finally(() => {
           setIsDataLoading(false);
         });
@@ -728,14 +739,49 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
     showToast(`«${newPerson.name}» muvaffaqiyatli shajaraga qo'shildi! 🌳`);
   };
 
+  // Ruxsat tekshiruvi: tizimga kirmagan bo'lsa login so'rash; viewer bo'lsa ogohlantirish; editor bo'lsa faqat o'zi, ota-onasi va farzandlari
+  const checkEditPermission = (targetPerson?: Person | null): boolean => {
+    // 1. Foydalanuvchi tizimga kirmagan bo'lsa login talab qilinadi
+    if (!state.currentUser) {
+      showToast("Shajarani tahrirlash yoki yangi qarindosh qo'shish uchun avval tizimga kiring.", "warn");
+      setIsLoginModalOpen(true);
+      return false;
+    }
+
+    // 2. Foydalanuvchining huquqi faqat o'qish (viewer) bo'lsa
+    const effectiveRole = inviteRole === 'viewer' || state.currentUser.role === 'viewer' ? 'viewer' : (state.currentUser.role || 'owner');
+    if (effectiveRole === 'viewer') {
+      showToast("Sizga ushbu shajarani faqat o'qish (ko'rish) huquqi berilgan. Tahrirlash uchun shajara egasidan ruxsat so'rang.", "warn");
+      return false;
+    }
+
+    // 3. Agar 'editor' huquqi bo'lsa: faqat o'zi, ota-onasi va farzandlarini tahrirlay oladi
+    if (effectiveRole === 'editor' && state.currentUser.personId && targetPerson) {
+      const myId = state.currentUser.personId;
+      const mePerson = state.people[myId];
+      const isSelf = targetPerson.id === myId;
+      const isParent = Boolean(mePerson && (targetPerson.id === mePerson.parentId || targetPerson.id === mePerson.motherId));
+      const isChild = Boolean(targetPerson.parentId === myId || targetPerson.motherId === myId);
+
+      if (!isSelf && !isParent && !isChild) {
+        showToast("Siz faqat o'zingiz, ota-onangiz va o'z farzandlaringiz ma'lumotlarini tahrirlashingiz mumkin.", "warn");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const handleDeletePerson = (personId: string) => {
+    const person = state.people[personId];
+    if (!checkEditPermission(person)) return;
+
     const totalCount = Object.keys(state.people).length;
     if (totalCount <= 1) {
       showToast("Shajarada kamida 1 kishi bo'lishi shart! Oxirgi shaxsni o'chira olmaysiz.", "warn");
       return;
     }
 
-    const person = state.people[personId];
     const actorName = state.currentUser?.fullName || state.currentUser?.name || 'Shajara egasi';
 
     setState((prev) => {
@@ -803,11 +849,13 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
   };
 
   const handleOpenAddRelative = (person: Person) => {
+    if (!checkEditPermission(person)) return;
     setTargetPersonForRelativeModal(person);
     setIsAddRelativeModalOpen(true);
   };
 
   const handleSelectRelation = (type: RelativeRelationType, targetPerson: Person) => {
+    if (!checkEditPermission(targetPerson)) return;
     setTargetRelationType(type);
     setPersonToEdit(null);
     if (type === 'father') {
@@ -855,6 +903,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
   };
 
   const handleAddParent = (child: Person) => {
+    if (!checkEditPermission(child)) return;
     setChildForNewParent(child);
     setParentForNewChild(null);
     setSpouseForNewPerson(null);
@@ -866,6 +915,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
   };
 
   const handleAddChild = (parent: Person) => {
+    if (!checkEditPermission(parent)) return;
     setParentForNewChild(parent);
     setChildForNewParent(null);
     setSiblingForNewPerson(null);
@@ -874,6 +924,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
   };
 
   const handleEditPerson = (person: Person) => {
+    if (!checkEditPermission(person)) return;
     setPersonToEdit(person);
     setParentForNewChild(null);
     setChildForNewParent(null);
@@ -882,6 +933,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
   };
 
   const handleOpenAddRoot = () => {
+    if (!checkEditPermission(null)) return;
     setPersonToEdit(null);
     setParentForNewChild(null);
     setChildForNewParent(null);
@@ -1202,6 +1254,8 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
         onClose={() => setIsTelegramBotModalOpen(false)}
         currentUser={state.currentUser}
         people={state.people}
+        rootId={state.rootId}
+        meId={state.meId}
       />
 
       {/* Login & Register Modal */}

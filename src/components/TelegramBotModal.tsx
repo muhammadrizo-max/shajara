@@ -23,6 +23,8 @@ interface TelegramBotModalProps {
   onClose: () => void;
   currentUser?: AuthUser | null;
   people?: Record<string, Person>;
+  rootId?: string;
+  meId?: string;
   onSimulateTelegramLogin?: () => void;
 }
 
@@ -31,9 +33,14 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
   onClose,
   currentUser,
   people = {},
+  rootId,
+  meId,
 }) => {
   // Taklif turi: 'general' (umumiy shajaraga) yoki 'slot' (aynan bir o'ringa)
   const [inviteType, setInviteType] = useState<'general' | 'slot'>('general');
+
+  // Ruxsat huquqi: belgilansa faqat o'zi, ota-onasi va farzandlarini tahrirlash huquqi ('editor'), belgilanmasa faqat ko'rish/o'qish huquqi ('viewer')
+  const [allowEditFamily, setAllowEditFamily] = useState<boolean>(false);
 
   // Bir o'ringa taklif qilish uchun maydonlar
   const [slotPersonName, setSlotPersonName] = useState<string>('');
@@ -57,16 +64,17 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
   const officialDomain = 'https://shajarachi.uz';
   const inviterId = currentUser?.telegramId || currentUser?.id || 'admin';
   const inviterName = currentUser?.fullName || currentUser?.name || 'Shajara egasi';
+  const selectedRole: 'editor' | 'viewer' = allowEditFamily ? 'editor' : 'viewer';
 
   // 1. Umumiy shajara havolalari
   const generalTgLink = `https://t.me/${botUsername}?start=tree_${generalToken}`;
-  const generalWebLink = `${officialDomain}/?invite=tree&token=${generalToken}`;
+  const generalWebLink = `${officialDomain}/?invite=tree&token=${generalToken}&role=${selectedRole}&inviter=${encodeURIComponent(inviterName)}`;
 
   // 2. Aynan bir o'ringa taklif havolalari (alohida va mustaqil parametrlar bilan)
   const encodedName = encodeURIComponent(slotPersonName.trim() || 'Qarindosh');
   const encodedRole = encodeURIComponent(slotRelationRole || 'Azo');
   const slotTgLink = `https://t.me/${botUsername}?start=slot_${slotToken}`;
-  const slotWebLink = `${officialDomain}/?invite=slot&token=${slotToken}&name=${encodedName}&role=${encodedRole}${
+  const slotWebLink = `${officialDomain}/?invite=slot&token=${slotToken}&name=${encodedName}&role=${selectedRole}&inviter=${encodeURIComponent(inviterName)}${
     slotExistingPersonId ? `&node=${encodeURIComponent(slotExistingPersonId)}` : ''
   }`;
 
@@ -75,7 +83,7 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
   const currentWebLink = inviteType === 'general' ? generalWebLink : slotWebLink;
   const activeToken = inviteType === 'general' ? generalToken : slotToken;
 
-  // Supabase'dagi invite_tokens jadvaliga taklifnomani yozish
+  // Supabase'dagi invite_tokens jadvaliga va /api/tree ga taklifnomani yozish
   useEffect(() => {
     if (!isOpen) return;
 
@@ -87,14 +95,31 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
       token: activeToken,
       familyId: currentUser?.familyId,
       createdBy: currentUser?.id,
-      role: 'editor',
+      role: selectedRole,
       inviteType: inviteType === 'general' ? 'family' : 'person',
       targetPersonId: inviteType === 'slot' ? slotExistingPersonId || undefined : undefined,
       slotName: inviteType === 'slot' ? slotPersonName.trim() : undefined,
       inviterName,
       createdAt: Date.now(),
     });
-  }, [isOpen, inviteType, activeToken, slotPersonName, slotRelationRole, slotExistingPersonId, inviterId, inviterName, currentUser?.familyId, currentUser?.id]);
+
+    // Boshqa foydalanuvchilar oq oyna ko'rmasligi uchun shajara holatini token bilan serverga zaxiralash
+    if (people && Object.keys(people).length > 0) {
+      fetch('/api/tree', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: `token:${activeToken}`,
+          state: {
+            people,
+            rootId: rootId || Object.keys(people)[0],
+            meId: meId || Object.keys(people)[0],
+            familyName: `${inviterName} shajarasi`,
+          },
+        }),
+      }).catch((e) => console.warn('[Invite Snapshot Save Error]:', e));
+    }
+  }, [isOpen, inviteType, activeToken, selectedRole, slotPersonName, slotRelationRole, slotExistingPersonId, inviterId, inviterName, currentUser?.familyId, currentUser?.id, people, rootId, meId]);
 
   if (!isOpen) return null;
 
@@ -240,6 +265,35 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
                 <span>Aynan bir o'ringa</span>
               </button>
             </div>
+          </div>
+
+          {/* Ruxsat Huquqi Checkboxi (Foydalanuvchi talabi) */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 transition-all">
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allowEditFamily}
+                onChange={(e) => setAllowEditFamily(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 cursor-pointer accent-emerald-600"
+              />
+              <div className="flex-1 text-left">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <ShieldCheck className={`w-3.5 h-3.5 ${allowEditFamily ? 'text-emerald-500' : 'text-slate-400'}`} />
+                  <span>Ota-onasi va o'z farzandlarini tahrirlash huquqini berish</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  {allowEditFamily ? (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                      ✓ Belgilandi: A'zo tizimga kirgach, faqat o'zi, ota-onasi va o'z farzandlarini tahrirlay oladi.
+                    </span>
+                  ) : (
+                    <span>
+                      Belgilanmagan (Ochiq): Foydalanuvchi faqat o'qish (ko'rish) huquqiga ega bo'ladi, tahrirlay olmaydi.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </label>
           </div>
 
           {/* 2. Bir o'ringa taklif tanlansa: Ism va Qarindoshlik o'rni */}

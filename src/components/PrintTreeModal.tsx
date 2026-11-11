@@ -1,7 +1,7 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { AuthUser, Person } from '../types';
 import { FamilyTreeLogo } from './FamilyTreeLogo';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 import { 
   Printer, 
