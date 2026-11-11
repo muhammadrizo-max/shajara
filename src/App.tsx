@@ -212,11 +212,16 @@ export default function App() {
       const slot = params.get('slot');
       const pId = params.get('personId');
 
+      const roleParam = params.get('role');
+      if (roleParam === 'editor' || roleParam === 'viewer') {
+        setInviteRole(roleParam);
+      }
+
       if (token) {
         setInviteCodeFromUrl(token);
         if (pId) setTargetPersonFromUrl(pId);
 
-        // Taklif havolasi orqali kirilganda landing page emas, to'g'ridan-to'g'ri shajara va ro'yxatdan o'tish ochiladi!
+        // Taklif havolasi orqali kirilganda to'g'ridan-to'g'ri shajara daraxti ochiladi
         setViewMode('tree');
         setIsDataLoading(true);
 
@@ -225,6 +230,9 @@ export default function App() {
           if (inviteData) {
             if (inviteData.targetPersonId) {
               setTargetPersonFromUrl(inviteData.targetPersonId);
+            }
+            if (inviteData.role) {
+              setInviteRole(inviteData.role === 'editor' ? 'editor' : 'viewer');
             }
             if (inviteData.familyId) {
               const famResult = await loadFamilyDataFromSupabase(inviteData.familyId);
@@ -238,13 +246,11 @@ export default function App() {
               }
             }
 
-            if (!state.currentUser) {
-              setIsLoginModalOpen(true);
-            }
+            // Foydalanuvchi talabi: Havola orqali kelganda to'g'ridan-to'g'ri daraxtni ko'radi (darhol login chiqmaydi)
             if (inviteData.slotName) {
               showToast(`Siz «${inviteData.slotName}» o'rniga taklif qilindingiz!`, 'success');
             } else {
-              showToast("Shajaraga xush kelibsiz! Taklif kodi tasdiqlandi.", 'success');
+              showToast("Shajaraga xush kelibsiz! Shajarani erkin ko'rishingiz mumkin.", 'success');
             }
           } else {
             // 2. Mahalliy taklifnomalar bazasidan zaxira tekshirish (Local fallback)
@@ -253,10 +259,10 @@ export default function App() {
             if (localInv?.targetPersonId) {
               setTargetPersonFromUrl(localInv.targetPersonId);
             }
-            if (!state.currentUser) {
-              setIsLoginModalOpen(true);
+            if (localInv?.role) {
+              setInviteRole(localInv.role === 'editor' ? 'editor' : 'viewer');
             }
-            showToast(`Taklif kodi qabul qilindi (Kod: ${token}). Ro'yxatdan o'ting.`, 'success');
+            showToast(`Shajaraga xush kelibsiz (Taklif kodi: ${token}).`, 'success');
           }
         }).catch((err) => {
           console.warn("Could not fetch invite_tokens data:", err);
@@ -265,10 +271,10 @@ export default function App() {
           if (localInv?.targetPersonId) {
             setTargetPersonFromUrl(localInv.targetPersonId);
           }
-          if (!state.currentUser) {
-            setIsLoginModalOpen(true);
+          if (localInv?.role) {
+            setInviteRole(localInv.role === 'editor' ? 'editor' : 'viewer');
           }
-          showToast(`Taklif kodi aniqlandi (${token}).`, 'success');
+          showToast(`Taklif kodi qabul qilindi (${token}).`, 'success');
         }).finally(() => {
           setIsDataLoading(false);
         });
@@ -1093,7 +1099,7 @@ const handleLogin = async (user: AuthUser, initialPersonData?: { gender: Gender 
       </main>
 
       {/* Person Detail Drawer */}
-      {(selectedPerson || isDataLoading) && (
+      {selectedPerson && (
         <PersonDetailDrawer
           person={state.people[selectedPerson.id] || selectedPerson}
           people={state.people}
