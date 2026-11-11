@@ -68,13 +68,31 @@ export default async function handler(req: any, res: any) {
     const contactInfo = String(rawContact).trim().replace(/[\x00-\x1F\x7F]/g, '').slice(0, 150);
     const message = String(rawMessage).trim().slice(0, 3000);
     const timestamp = new Date().toISOString();
-    const settings = body.settings || {};
+    const settings: any = {};
 
     if (!contactInfo || !message) {
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, error: 'Aloqa ma\'lumoti va xabar kiritilishi shart' }));
-      return;
+    const sbUrl = process.env.SUPABASE_URL;
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (sbUrl && sbKey) {
+      await fetch(`${sbUrl.replace(/\/$/, '')}/rest/v1/contact_messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          email: contactInfo,
+          contact_info: contactInfo,
+          message,
+          sender_name: 'Mehmon',
+          status: 'new',
+          created_at: timestamp,
+        }),
+      }).catch(() => {});
+    }
     }
 
     // HTML Injection Oldini olish (Output Escaping)
@@ -86,8 +104,8 @@ export default async function handler(req: any, res: any) {
     let sentToEmail = false;
 
     // 1. Telegram Bot Adminiga yuborish
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || settings?.telegram?.botToken;
-    const adminChatId = process.env.ADMIN_TELEGRAM_CHAT_ID || settings?.telegram?.adminChatId;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const adminChatId = process.env.ADMIN_TELEGRAM_CHAT_ID;
 
     if (botToken && adminChatId) {
       try {
@@ -113,7 +131,7 @@ export default async function handler(req: any, res: any) {
 
     // 2. Emailga yuborish (admin@shajarachi.uz)
     const adminEmail = process.env.ADMIN_EMAIL || 'support@shajarachi.uz';
-    const emailSubject = `${settings?.email?.subjectPrefix || '[Shajarachi.uz Murojaat]'} Yangi xabar: ${contactInfo}`;
+    const emailSubject = `[Shajarachi.uz Murojaat] Yangi xabar: ${contactInfo.slice(0, 60)}`;
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
         <h2 style="color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px;">🌳 Shajarachi.uz — Yangi Murojaat</h2>
