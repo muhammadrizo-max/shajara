@@ -91,7 +91,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
 
     // Helper to convert oklch color string to rgb
     const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const oklchRegex = /oklch\([^)]+\)/gi;
     const convertOklch = (str: string): string => {
       if (!str || !str.includes('oklch')) return str;
