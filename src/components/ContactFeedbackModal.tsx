@@ -61,7 +61,7 @@ export const ContactFeedbackModal: React.FC<ContactFeedbackModalProps> = ({
       if (res.success) {
         setIsSuccess(true);
         if (onSuccessToast) {
-          onSuccessToast("Taklifingiz admin@shajarachi.uz va Telegram bot adminga yetkazildi!");
+          onSuccessToast("Taklifingiz support@shajarachi.uz va Telegram bot adminga yetkazildi!");
         }
       } else {
         setError(res.message || "Xabarni yuborishda xatolik yuz berdi");
@@ -100,7 +100,7 @@ export const ContactFeedbackModal: React.FC<ContactFeedbackModalProps> = ({
                 Taklif va So'rov Yuborish
               </h3>
               <p className="text-[11px] text-emerald-100">
-                To'g'ridan-to'g'ri admin@shajarachi.uz va Telegram adminga boradi
+                To'g'ridan-to'g'ri support@shajarachi.uz va Telegram adminga boradi
               </p>
             </div>
           </div>
@@ -126,7 +126,7 @@ export const ContactFeedbackModal: React.FC<ContactFeedbackModalProps> = ({
                   Murojaatingiz qabul qilindi!
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-                  Taklifingiz rasmiy <strong>admin@shajarachi.uz</strong> pochta qutisiga va Telegram adminimizga muvaffaqiyatli yetkazildi. Rahmat!
+                  Taklifingiz rasmiy <strong>support@shajarachi.uz</strong> pochta qutisiga va Telegram adminimizga muvaffaqiyatli yetkazildi. Rahmat!
                 </p>
               </div>
 
@@ -247,7 +247,7 @@ export const ContactFeedbackModal: React.FC<ContactFeedbackModalProps> = ({
                 <div className="flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Qabul qiluvchi:</span>
-                  <strong className="text-slate-700 dark:text-slate-200">admin@shajarachi.uz</strong>
+                  <strong className="text-slate-700 dark:text-slate-200">support@shajarachi.uz</strong>
                 </div>
                 <div className="flex items-center gap-1 text-[#24A1DE]">
                   <Bot className="w-3.5 h-3.5" />
