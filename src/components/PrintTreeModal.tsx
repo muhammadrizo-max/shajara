@@ -173,7 +173,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
     } catch (err) {
       console.error('[Export Image Error]:', err);
       // Fallback to browser print if image capture was blocked
-      window.print();
+      alert("Faylni yuklab bo'lmadi. Keyinroq urinib ko'ring.");
     } finally {
       setIsExporting(null);
     }
@@ -219,7 +219,7 @@ export const PrintTreeModal: React.FC<PrintTreeModalProps> = ({
       pdf.save(`Shajarachi_Nasabnoma_${dateStr}.pdf`);
     } catch (err) {
       console.error('[PDF Export Error]:', err);
-      window.print();
+      alert("Faylni yuklab bo'lmadi. Keyinroq urinib ko'ring.");
     } finally {
       setIsExporting(null);
     }
