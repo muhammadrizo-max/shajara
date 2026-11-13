@@ -3,6 +3,7 @@
  * /api/contact
  * Foydalanuvchi murojaatlarini Telegram Bot adminiga va kelajakdagi emailga jo'natish
  */
+import { buildContactEmail } from '../lib/emailTemplate';
 
 function setCorsHeaders(req: any, res: any) {
   const allowedOrigins = [
@@ -132,17 +133,13 @@ export default async function handler(req: any, res: any) {
     // 2. Emailga yuborish (admin@shajarachi.uz)
     const adminEmail = process.env.ADMIN_EMAIL || 'support@shajarachi.uz';
     const emailSubject = `[Shajarachi.uz Murojaat] Yangi xabar: ${contactInfo.slice(0, 60)}`;
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
-        <h2 style="color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px;">🌳 Shajarachi.uz — Yangi Murojaat</h2>
-        <p><strong>Yuboruvchi / Aloqa:</strong> ${safeContactHtml}</p>
-        <p><strong>Vaqt:</strong> ${timestamp}</p>
-        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #059669;">
-          <p style="margin: 0; white-space: pre-wrap; color: #1e293b;">${safeMessageHtml}</p>
-        </div>
-        <p style="color: #64748b; font-size: 12px; margin-top: 20px;">Ushbu xabar shajarachi.uz aloqa formasi orqali ${adminEmail} manziliga yo'llandi.</p>
-      </div>
-    `;
+    const mail = buildContactEmail({
+      contactInfo,
+      message,
+      timestamp: new Date().toISOString(),
+    });
+    const emailSubject = mail.subject;
+    const emailHtml = mail.html;
 
     // A) Resend API orqali yuborish
     if (process.env.RESEND_API_KEY) {
@@ -154,7 +151,7 @@ export default async function handler(req: any, res: any) {
             'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
           },
           body: JSON.stringify({
-            from: process.env.EMAIL_FROM || 'Shajarachi <onboarding@resend.dev>',
+            from: process.env.EMAIL_FROM || 'Shajarachi <noreply@send.shajarachi.uz>',
             to: [adminEmail],
             reply_to: contactInfo.includes('@') ? contactInfo : undefined,
             subject: emailSubject,
