@@ -44,7 +44,7 @@ function parseJsonBody(req: any): Promise<any> {
   });
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handlerInner(req: any, res: any) {
   setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
@@ -188,5 +188,17 @@ export default async function handler(req: any, res: any) {
       success: false,
       error: 'Server xatoligi: ' + (error?.message || error),
     }));
+  }
+}
+
+export default async function handler(req: any, res: any) {
+  try {
+    return await handlerInner(req, res);
+  } catch (e: any) {
+    console.error('[API Contact FATAL]', e);
+    return res.status(500).json({
+      success: false,
+      error: 'XATO: ' + String(e?.stack || e?.message || e).slice(0, 800),
+    });
   }
 }
