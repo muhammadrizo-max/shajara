@@ -132,7 +132,6 @@ export default async function handler(req: any, res: any) {
 
     // 2. Emailga yuborish (admin@shajarachi.uz)
     const adminEmail = process.env.ADMIN_EMAIL || 'support@shajarachi.uz';
-    const emailSubject = `[Shajarachi.uz Murojaat] Yangi xabar: ${contactInfo.slice(0, 60)}`;
     const mail = buildContactEmail({
       contactInfo,
       message,
